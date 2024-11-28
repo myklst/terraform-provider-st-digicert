@@ -35,7 +35,7 @@ endif
 
 .PHONY: generate-docs
 generate-docs:
-	tfplugindocs generate
+	go generate ./...
 
 .PHONY: go-test
 go-test:
