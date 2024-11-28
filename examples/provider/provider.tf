@@ -1,4 +1,4 @@
-# Copyright (c) HashiCorp, Inc.
+# Configure the Digicert Provider
 
 terraform {
   required_providers {

@@ -13,7 +13,14 @@ The st-digicert_certificate resource can be used to create and manage an certifi
 ## Example Usage
 
 ```terraform
-# Copyright (c) HashiCorp, Inc.
+terraform {
+  required_providers {
+    st-digicert = {
+      source  = "example.local/myklst/st-digicert"
+      version = "~> 0.1"
+    }
+  }
+}
 
 resource "st-digicert_certificate" "certificate" {
   common_name        = "abc.com"
@@ -45,7 +52,7 @@ resource "st-digicert_certificate" "certificate" {
 
 - `dns_challenge` (Block, Optional) (see [below for nested schema](#nestedblock--dns_challenge))
 - `min_days_remaining` (Number) Threshole of the expired date remaining of the certificate.
-- `order_validity_days` (Number) Validity period of the order. Number of days the order is valid.
+- `order_validity_days` (Number) Validity period of the order. Number of days the order remains valid.
 - `sans` (List of String) Additional domains to be secured. Can result in additional costs.
 
 ### Read-Only
@@ -65,5 +72,11 @@ resource "st-digicert_certificate" "certificate" {
 
 Required:
 
-- `config` (Map of String, Sensitive) Configuration of the DNS provider,The valid config for route53 will be `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; For `alidns`, the valid config will be `ALICLOUD_ACCESS_KEY` and `ALICLOUD_SECRET_KEY`, For `cloudflare`, the valid config is `CLOUDFLARE_DNS_API_TOKEN` and `CLOUDFLARE_ZONE_API_TOKEN`
-- `provider` (String) DNS provider which manage the domain. Valid provider are `route53`,`alidns`, and `cloudflare`.
+- `config` (Map of String, Sensitive) Configuration of the DNS provider, The valid configs:
+	- `route53` - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+	- `alidns` - `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY`
+	- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`, `CLOUDFLARE_ZONE_API_TOKEN`
+- `provider` (String) DNS provider which manage the domain. Valid providers:
+  - `route53`
+  - `alidns`
+  - `cloudflare`.

@@ -299,7 +299,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"order_validity_days": schema.Int32Attribute{
-				Description: "Validity period of the order. Number of days the order is valid.",
+				Description: "Validity period of the order. Number of days the order remains valid.",
 				Optional:    true,
 				Computed:    true,
 				Default:     int32default.StaticInt32(365),
@@ -364,10 +364,11 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 					},
 					"config": schema.MapAttribute{
 						ElementType: types.StringType,
-						Description: "Configuration of the DNS provider," +
-							"The valid config for route53 will be `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`; " +
-							"For `alidns`, the valid config will be `ALICLOUD_ACCESS_KEY` and `ALICLOUD_SECRET_KEY`, " +
-							"For `cloudflare`, the valid config is `CLOUDFLARE_DNS_API_TOKEN` and `CLOUDFLARE_ZONE_API_TOKEN`",
+						Description: "Configuration of the DNS provider, " +
+							"The valid configs:" +
+							"\n\t- `route53` - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`" +
+							"\n\t- `alidns` - `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY`" +
+							"\n\t- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`, `CLOUDFLARE_ZONE_API_TOKEN`",
 						Required:  true,
 						Sensitive: true,
 						Validators: []validator.Map{

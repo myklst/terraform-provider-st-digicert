@@ -1,4 +1,11 @@
-# Copyright (c) HashiCorp, Inc.
+terraform {
+  required_providers {
+    st-digicert = {
+      source  = "example.local/myklst/st-digicert"
+      version = "~> 0.1"
+    }
+  }
+}
 
 resource "st-digicert_certificate" "certificate" {
   common_name        = "abc.com"

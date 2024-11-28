@@ -13,7 +13,7 @@ Digicert is a CA provider that manage certificates.
 ## Example Usage
 
 ```terraform
-# Copyright (c) HashiCorp, Inc.
+# Configure the Digicert Provider
 
 terraform {
   required_providers {
