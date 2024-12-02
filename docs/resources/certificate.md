@@ -76,7 +76,7 @@ Required:
 	- `route53` - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 	- `alidns` - `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY`
 	- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`, `CLOUDFLARE_ZONE_API_TOKEN`
-- `provider` (String) DNS provider which manage the domain. Valid providers:
-  - `route53`
-  - `alidns`
-  - `cloudflare`.
+- `provider` (String) DNS provider which manage the domain, Valid providers:
+	- `route53`
+	- `alidns`
+	- `cloudflare`

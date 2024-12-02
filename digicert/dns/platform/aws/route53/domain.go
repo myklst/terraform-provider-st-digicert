@@ -3,6 +3,7 @@
 package route53
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/cenkalti/backoff"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	awsErrCommon "github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/aws"
 	"github.com/sirupsen/logrus"
 )
@@ -163,7 +165,7 @@ func (r *Rout53) ModifyAWSRoute53Record(action, commonName, token string, hosted
 				logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
 				if aerr, ok := err.(awserr.Error); ok {
 					errCode := aerr.Code()
-
+					tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 modify record Error: %s", err.Error()))
 					if awsErrCommon.IsPermanentCommonError(errCode) {
 						return backoff.Permanent(fmt.Errorf("permanent err:\n%w", aerr))
 					}

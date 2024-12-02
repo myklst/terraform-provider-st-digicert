@@ -3,9 +3,12 @@
 package digicert
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -31,6 +34,42 @@ func getDigicertClient() *CertificateResource {
 	return &CertificateResource{client}
 }
 
+// Acceptance Test use only
+func (r *CertificateResource) revokedAllOrders() error {
+	resp, err := r.client.GetOrdersList()
+	if err != nil {
+		return err
+	}
+	var orders OrderListRespBody
+	if err := json.Unmarshal(resp, &orders); err != nil {
+		return err
+	}
+
+	for _, errormsg := range orders.ErrorMsg {
+		log.Println(strings.Contains(errormsg.Code, "Missing authentication"))
+	}
+	var order_ids []int
+
+	for _, order := range orders.Orders {
+		order_ids = append(order_ids, order.ID)
+	}
+
+	if len(order_ids) == 0 {
+		log.Println("No order issued.")
+	} else {
+		log.Println("Order Id is : ", order_ids)
+	}
+
+	for _, o_id := range order_ids {
+
+		jsonData := []byte(`{
+			"skip_approval": true
+			}`)
+		r.client.RevokeAllCert(o_id, jsonData)
+	}
+	return nil
+}
+
 func revokeAllOrder() resource.TestCheckFunc {
 	// revoke all the order after test as order cannot be revoked by terraform
 	r := getDigicertClient()
@@ -51,7 +90,7 @@ func TestDigicert_DuplicateOrder(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config:      testDigicertConfigDuplicateOrder(),
-				ExpectError: regexp.MustCompile("sige-test3.com already placed order on Digicert, order id:"),
+				ExpectError: regexp.MustCompile("duplication order placement, sige-test3.com already placed order on Digicert"),
 			},
 		},
 	})
@@ -238,7 +277,7 @@ func TestDigicert_StateImport(t *testing.T) {
 func testDigicertCertificateChecking(action string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		r := getDigicertClient()
-		orders, err := r.getOrders("")
+		orders, err := r.getOrderList()
 		if err != nil {
 			return err
 		}

@@ -15,10 +15,11 @@ const (
 	INTERMEDIATE_ENDPOINT                = "https://www.digicert.com/services/v2/certificate/intermediates"
 	DOMAIN_ENDPOINT                      = "https://www.digicert.com/services/v2/domain"
 	REQUEST_ENDPOINT                     = "https://www.digicert.com/services/v2/request"
+	ORGANIZATION_ENDPOINT                = "https://www.digicert.com/services/v2/organization"
 )
 
 func (c *Client) GetOrgInfoByID(orgId int) (resp []byte, err error) {
-	url := fmt.Sprintf("https://www.digicert.com/services/v2/organization/%d", orgId)
+	url := fmt.Sprintf("%s/%d", ORGANIZATION_ENDPOINT, orgId)
 	return c.httpResponse(http.MethodGet, url, nil)
 }
 
@@ -56,7 +57,6 @@ func (c *Client) GetOrdersList() (resp []byte, err error) {
 
 func (c *Client) GetOrderInfo(orderId int) (resp []byte, err error) {
 	url := fmt.Sprintf("%s/%d", ORDER_ENDPOINT, orderId)
-
 	return c.httpResponse(http.MethodGet, url, nil)
 }
 

@@ -3,12 +3,14 @@
 package dns
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	alidns "github.com/alibabacloud-go/alidns-20150109/v2/client"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/alicloud"
 )
 
@@ -110,6 +112,7 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 		addRecord := func() error {
 			recordId, err = a.AddDnsRecord(commonName, "TXT", "@", token)
 			if err != nil {
+				tflog.Debug(context.Background(), fmt.Sprintf("Alidns Add record Error: %s", err.Error()))
 				if alicloud.IsPermanentCommonError(err.Error()) {
 					return backoff.Permanent(err)
 				}
@@ -129,6 +132,7 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 	// Update the existed TXT record
 	updateRecord := func() error {
 		if err := a.UpdateDnsRecord(*foundDnsRecord.RecordId, *foundDnsRecord.Type, *foundDnsRecord.RR, token); err != nil {
+			tflog.Debug(context.Background(), fmt.Sprintf("Alidns update record Error: %s", err.Error()))
 			if alicloud.IsPermanentCommonError(err.Error()) {
 				return backoff.Permanent(err)
 			}
