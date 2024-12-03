@@ -295,7 +295,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"min_days_remaining": schema.Int32Attribute{
-				Description: "Threshole of the expired date remaining of the certificate.",
+				Description: "Threshole of the expired date remaining of the certificate. Default 30 days.",
 				Optional:    true,
 				Computed:    true,
 				Default:     int32default.StaticInt32(30),
@@ -315,10 +315,11 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				},
 			},
 			"order_validity_days": schema.Int32Attribute{
-				Description: "Validity period of the order. Number of days the order remains valid.",
-				Optional:    true,
-				Computed:    true,
-				Default:     int32default.StaticInt32(365),
+				Description: "Validity period of the order. Number of days the order remains valid. " +
+					"Default 365 days.",
+				Optional: true,
+				Computed: true,
+				Default:  int32default.StaticInt32(365),
 				Validators: []validator.Int32{
 					int32validator.Between(1, 1095),
 				},

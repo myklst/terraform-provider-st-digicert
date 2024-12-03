@@ -25,7 +25,7 @@ terraform {
 resource "st-digicert_certificate" "certificate" {
   common_name        = "abc.com"
   sans               = ["*.abc.com"]
-  organization_id    = 2918233
+  organization_id    = 2384958
   min_days_remaining = 30
   product_name       = "GeoTrust TrueBusiness ID OV"
 
