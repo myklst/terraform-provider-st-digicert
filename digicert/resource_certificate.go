@@ -515,8 +515,6 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	if challengeErr := r.dnsChallenge(plan.DNSChallenge.Provider.ValueString(), dnsCreds, issueCert); challengeErr != nil {
-		// if the domain is still valid but fail dns challenge, (validated domain before but redo dns challenge)
-		// it will still able to place order, even the dns challenge is fail.
 		if ord.Status == "pending" || ord.Certificate.Status == "pending" {
 			resp.Diagnostics.AddError("DNS Challange Error.", challengeErr.Error())
 			if err := r.cancelOrderRequest(ord.ID); err != nil {
@@ -527,6 +525,8 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 				return
 			}
 		} else {
+			// if the domain is still valid but fail dns challenge, (validated domain before but redo dns challenge)
+			// it will still able to place order, even the dns challenge is fail.
 			resp.Diagnostics.AddWarning("DNS Challange fail, but the cert is still issued since the domain is still valid to use.", challengeErr.Error())
 		}
 	}
@@ -595,8 +595,6 @@ func (r *CertificateResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	// Order status is issued but certificate status is revoked
-
 	state.OrderID = types.Int32Value(int32(order.ID))
 	state.CertificateID = types.Int32Value(int32(order.Certificate.ID))
 	state.CommonName = types.StringValue(order.Certificate.CommonName)
@@ -627,7 +625,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// if cert is not expired, update only the changed of user inputs.
+	// If cert is not expired, update only the changed of user inputs.
 	if !expired {
 		state.MinDayRemaining = plan.MinDayRemaining
 		state.OrderValidityDays = plan.OrderValidityDays
@@ -730,8 +728,6 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	if challengeErr := r.dnsChallenge(plan.DNSChallenge.Provider.ValueString(), dnsCreds, issueCert); challengeErr != nil {
-		// if the domain is still valid but fail dns challenge, (validated domain before but redo dns challenge)
-		// it will still able to place order, even the dns challenge is fail.
 		if ord.Status == "pending" || ord.Certificate.Status == "pending" {
 			resp.Diagnostics.AddError("DNS Challange Error.", challengeErr.Error())
 			if err := r.cancelOrderRequest(ord.ID); err != nil {
@@ -741,6 +737,8 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 					fmt.Sprintf("Order id: %d", ord.ID), err.Error())
 			}
 		} else {
+			// if the domain is still valid but fail dns challenge, (validated domain before but redo dns challenge)
+			// it will still able to place order, even the dns challenge is fail.
 			resp.Diagnostics.AddWarning("DNS Challange fail, but the cert is still issued since the domain is still valid to use.", challengeErr.Error())
 		}
 
@@ -1080,7 +1078,6 @@ func (r *CertificateResource) checkDuplicateCertPlacement(commonName string) err
 		}
 	}
 
-	// order status is issued but certificate status is revoked
 	return nil
 }
 
@@ -1114,7 +1111,7 @@ func (r *CertificateResource) getIssuedOrders(filterCommonName string) (orders [
 		return orders, err
 	}
 
-	// check if any error msg return from API
+	// Check if any error msg return from API
 	for _, errormsg := range orderList.ErrorMsg {
 		return orders, errors.New(errormsg.Message)
 	}
@@ -1166,7 +1163,7 @@ func (r *CertificateResource) getOrderList() (orders OrderListRespBody, err erro
 		return orders, err
 	}
 
-	// check if any error msg return from API
+	// Check if any error msg return from API
 	for _, errormsg := range orders.ErrorMsg {
 		return orders, errors.New(errormsg.Message)
 	}
@@ -1271,7 +1268,7 @@ func (r *CertificateResource) retrieveReissuableOrd(minOrderRemainingDays int) (
 		orderExpiredDaysRemaining := int(time.Until(orderEndDate).Hours() / 24)
 
 		if ord.Certificate.Status == "revoked" && orderExpiredDaysRemaining > minOrderRemainingDays {
-			// check if the order id is grab by others threat (tf's concurrent)
+			// Check if the order id is grab by others threat (tf's concurrent)
 			if isAbleToUseOrderId(ord.ID) {
 				return ord, true, nil
 			}
@@ -1425,7 +1422,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 				defer cloudflareClient.DeleteDnsRecord(dnsRecordID, domainRespBody.Name)
 			}
 
-			// Trigger validate domain action on Digicert
+			// Trigger validate domain action in Digicert
 			checkDomain := func() error {
 				activateDomainresp, err := r.client.CheckDomainDCV(domainRespBody.ID)
 				if err != nil {
@@ -1458,7 +1455,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 }
 
 func (r *CertificateResource) getDomainIDByDCVRandomValue(dcvRandomValue string) (domainID int, err error) {
-	// Obatain the domain id that need to perform dns challenge
+	// Obtain the domain id that need to perform dns challenge
 	domains, err := r.getAllDomains()
 	if err != nil {
 		return -1, err
