@@ -1376,9 +1376,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 				if err := route53Client.ModifyAWSRoute53Record(UPSERT_RECORD, domainRespBody.Name, domainRespBody.DcvToken.Token, hostedZoneIds); err != nil {
 					return err
 				}
-
 				defer route53Client.ModifyAWSRoute53Record(DELETE_RECORD, domainRespBody.Name, domainRespBody.DcvToken.Token, hostedZoneIds)
-
 			case "alidns":
 				for k, v := range dnsCreds {
 					if k == ALICLOUD_ACCESS_KEY {
@@ -1400,7 +1398,6 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 				defer alidnsClient.DeleteDnsRecord(recordID)
-
 			case "cloudflare":
 				var token string
 				for k, v := range dnsCreds {
@@ -1419,6 +1416,8 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 				defer cloudflareClient.DeleteDnsRecord(dnsRecordID, domainRespBody.Name)
+			default:
+				return fmt.Errorf("invalid DNS Provider")
 			}
 
 			// Trigger validate domain action in Digicert
