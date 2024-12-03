@@ -760,7 +760,6 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	plan.CertificatePem = types.StringValue(certPem)
 	plan.IssuerPem = types.StringValue(issuerPem)
 	plan.RootPem = types.StringValue(rootPem)
-
 	plan.OrderID = types.Int32Value(int32(ord.ID))
 	plan.CertificateID = types.Int32Value(int32(ord.Certificate.ID))
 	plan.PrivateKeyPem = types.StringValue(privateKey)
