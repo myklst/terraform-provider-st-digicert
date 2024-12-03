@@ -629,6 +629,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	if !expired {
 		state.MinDayRemaining = plan.MinDayRemaining
 		state.OrderValidityDays = plan.OrderValidityDays
+
 		setStateDiags := resp.State.Set(ctx, state)
 		resp.Diagnostics.Append(setStateDiags...)
 		if resp.Diagnostics.HasError() {
