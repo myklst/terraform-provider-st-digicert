@@ -449,7 +449,8 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	// Check if there is order can be reissued
-	order, foundReissuableOrder, err := r.retrieveReissuableOrd(-1)
+	minDate := -1
+	order, foundReissuableOrder, err := r.retrieveReissuableOrd(minDate)
 	if err != nil {
 		resp.Diagnostics.AddError("Retreive reissuable's order id Error.", err.Error())
 		return
