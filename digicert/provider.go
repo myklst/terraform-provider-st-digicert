@@ -59,7 +59,6 @@ func (p *digicertProvider) Configure(ctx context.Context, req provider.Configure
 	apiKey := os.Getenv("DIGICERT_API_KEY")
 
 	var data digicertProviderModel
-
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
 	if data.ApiKey.ValueString() != "" {

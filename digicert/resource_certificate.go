@@ -413,13 +413,11 @@ func (r *CertificateResource) Configure(_ context.Context, req resource.Configur
 	}
 
 	client, ok := req.ProviderData.(*digicertapi.Client)
-
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
 			fmt.Sprintf("Expected *digicertapi.Credential, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
@@ -494,7 +492,6 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 		// Issue cert
 		issueCert, err = r.issueCertificate(plan, csr)
 		if err != nil {
-
 			resp.Diagnostics.AddError("Issue certificate Error.", err.Error())
 			return
 		}
@@ -1060,6 +1057,7 @@ func (r *CertificateResource) revokeCertificate(certID int) error {
 			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
 		}
 	}
+
 	return nil
 }
 
@@ -1245,6 +1243,7 @@ func (r *CertificateResource) getAllDomains() (domains []Domain, err error) {
 	if len(domainList.Domains) == 0 {
 		return domains, fmt.Errorf("digicert's domain list is empty")
 	}
+
 	return domainList.Domains, nil
 }
 
@@ -1298,7 +1297,6 @@ func (r *CertificateResource) generateCSR(orgID int, commonName string, sans []s
 		Type:  RSA_PRIVATE_KEY,
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	}
-
 	privateKeyPEM := pem.EncodeToMemory(privateKeyBlock)
 	privateKeyString := string(privateKeyPEM)
 

@@ -22,6 +22,7 @@ func (c *Cloudflare) CreateDNSRecord(domainName, recordName, content, rrType str
 		Content: fmt.Sprintf("%q", content),
 		TTL:     ttl,
 	}
+
 	dnsRecord, err := c.Client.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), createDNS)
 	if err != nil {
 		return "", err
@@ -58,6 +59,7 @@ func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType
 		Content: fmt.Sprintf("%q", content),
 		TTL:     ttl,
 	}
+
 	if _, err := c.Client.UpdateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), updateDns); err != nil {
 		return err
 	}

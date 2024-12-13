@@ -69,7 +69,6 @@ func NewClient(apiKey string) (*Client, error) {
 
 func (c *Client) httpResponse(httpMethod string, url string, payload []byte) (resp []byte, err error) {
 	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(payload))
-
 	if err != nil {
 		return nil, err
 	}

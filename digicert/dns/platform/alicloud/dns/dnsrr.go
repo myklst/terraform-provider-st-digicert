@@ -25,6 +25,7 @@ func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.Descri
 		// quiet a lot for now, so we don't do paging
 		// process first.
 	}
+
 	response, err := a.Client.DescribeDomainRecords(describeDomainRecordsRequest)
 	if err != nil {
 		return nil, err
@@ -39,6 +40,7 @@ func (a *Alidns) GetDnsRecord(domain, rrType, subdomain string) (domainRecords [
 		TypeKeyWord: tea.String(rrType),
 		RRKeyWord:   tea.String(subdomain),
 	}
+
 	response, err := a.Client.DescribeDomainRecords(describeDomainRecordsRequest)
 	if err != nil {
 		return nil, err
@@ -54,6 +56,7 @@ func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (recordID string
 		Type:       tea.String(rrType),
 		Value:      tea.String(value),
 	}
+
 	response, err := a.Client.AddDomainRecord(addDomainRecordRequest)
 	if err != nil {
 		return "", err
@@ -69,6 +72,7 @@ func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) (err error
 		Type:     tea.String(rrType),
 		Value:    tea.String(value),
 	}
+
 	if _, err := a.Client.UpdateDomainRecord(updateDomainRecordRequest); err != nil {
 		return err
 	}
@@ -80,6 +84,7 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	deleteDomainRecordRequest := &alidns.DeleteDomainRecordRequest{
 		RecordId: tea.String(id),
 	}
+
 	if _, err := a.Client.DeleteDomainRecord(deleteDomainRecordRequest); err != nil {
 		return err
 	}

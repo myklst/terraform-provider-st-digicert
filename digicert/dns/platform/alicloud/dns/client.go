@@ -25,7 +25,6 @@ func NewClient(accessKey, secretKey string) (dns *Alidns, err error) {
 
 	config.Endpoint = tea.String("alidns.cn-hongkong.aliyuncs.com")
 	client, err := alidns.NewClient(config)
-	
 	return &Alidns{
 		Client: client,
 	}, err
