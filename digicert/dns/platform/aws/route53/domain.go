@@ -27,10 +27,10 @@ type Rout53 struct {
 }
 
 func (r *Rout53) ListAllDomains() (hostedZoneList []*route53.HostedZone, err error) {
-	listHostedZonesInputRequest := &route53.ListHostedZonesInput{}
+	req := &route53.ListHostedZonesInput{}
 
 	for {
-		result, err := r.Client.ListHostedZones(listHostedZonesInputRequest)
+		result, err := r.Client.ListHostedZones(req)
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +40,7 @@ func (r *Rout53) ListAllDomains() (hostedZoneList []*route53.HostedZone, err err
 
 		// If there are more pages, set the marker to the NextMarker from the current page
 		if *result.IsTruncated {
-			listHostedZonesInputRequest.Marker = result.NextMarker
+			req.Marker = result.NextMarker
 		} else {
 			// If there are no more pages, break out of the loop
 			break
@@ -53,13 +53,13 @@ func (r *Rout53) ListAllDomains() (hostedZoneList []*route53.HostedZone, err err
 func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []string, err error) {
 	domain = fmt.Sprintf("%s.", domain) // AWS hosted zone format, Ensure the domain name ends with a dot (.)
 
-	listHostedZonesByNameInputRequest := &route53.ListHostedZonesByNameInput{
+	req := &route53.ListHostedZonesByNameInput{
 		DNSName:  aws.String(domain),
 		MaxItems: aws.String("1"),
 	}
 
 	for {
-		result, err := r.Client.ListHostedZonesByName(listHostedZonesByNameInputRequest)
+		result, err := r.Client.ListHostedZonesByName(req)
 		if err != nil {
 			return nil, err
 		}
@@ -77,31 +77,31 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 			break
 		}
 
-		listHostedZonesByNameInputRequest.DNSName = result.NextDNSName
-		listHostedZonesByNameInputRequest.HostedZoneId = result.NextHostedZoneId
+		req.DNSName = result.NextDNSName
+		req.HostedZoneId = result.NextHostedZoneId
 	}
 
 	return hostedZoneIds, nil
 }
 
-func (r *Rout53) ListReusableDelegationSets() (listReusableDelegationSetsRequest *route53.ListReusableDelegationSetsOutput, err error) {
-	listReusableDelegationSetsRequest, err = r.Client.ListReusableDelegationSets(&route53.ListReusableDelegationSetsInput{})
+func (r *Rout53) ListReusableDelegationSets() (resp *route53.ListReusableDelegationSetsOutput, err error) {
+	resp, err = r.Client.ListReusableDelegationSets(&route53.ListReusableDelegationSetsInput{})
 	if err != nil {
 		return nil, err
 	}
 
-	return listReusableDelegationSetsRequest, nil
+	return resp, nil
 }
 
 func (r *Rout53) CreateHostedZone(domain, delegationSetId string) (resp *route53.CreateHostedZoneOutput, err error) {
-	createHostedZoneInput := &route53.CreateHostedZoneInput{
+	req := &route53.CreateHostedZoneInput{
 		Name:            aws.String(domain),
 		DelegationSetId: aws.String(delegationSetId),
 		// Required: CallerReference, used unique timestamp for request.
 		CallerReference: aws.String(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05 MST")),
 	}
 
-	resp, err = r.Client.CreateHostedZone(createHostedZoneInput)
+	resp, err = r.Client.CreateHostedZone(req)
 	if err != nil {
 		return nil, err
 	}
@@ -110,11 +110,11 @@ func (r *Rout53) CreateHostedZone(domain, delegationSetId string) (resp *route53
 }
 
 func (r *Rout53) DeleteHostedZone(hostedZoneId string) (resp *route53.DeleteHostedZoneOutput, err error) {
-	deleteHostedZoneInput := &route53.DeleteHostedZoneInput{
+	req := &route53.DeleteHostedZoneInput{
 		Id: aws.String(hostedZoneId),
 	}
 
-	resp, err = r.Client.DeleteHostedZone(deleteHostedZoneInput)
+	resp, err = r.Client.DeleteHostedZone(req)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (r *Rout53) DeleteHostedZone(hostedZoneId string) (resp *route53.DeleteHost
 }
 
 func (r *Rout53) ChangeResourceRecordSets(action, domain, verifyTxtContent, hostedZoneId string) (resp *route53.ChangeResourceRecordSetsOutput, err error) {
-	changeResourceRecordSetsInput := &route53.ChangeResourceRecordSetsInput{
+	req := &route53.ChangeResourceRecordSetsInput{
 		HostedZoneId: aws.String(hostedZoneId),
 		ChangeBatch: &route53.ChangeBatch{
 			Changes: []*route53.Change{
@@ -145,7 +145,7 @@ func (r *Rout53) ChangeResourceRecordSets(action, domain, verifyTxtContent, host
 		},
 	}
 
-	resp, err = r.Client.ChangeResourceRecordSets(changeResourceRecordSetsInput)
+	resp, err = r.Client.ChangeResourceRecordSets(req)
 	if err != nil {
 		return nil, err
 	}
