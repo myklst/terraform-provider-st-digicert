@@ -266,7 +266,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
-					// domain min lenght and max lenght
+					// domain min lenght and max length
 					stringvalidator.LengthBetween(3, 255),
 				},
 			},
@@ -279,7 +279,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 					listplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.List{
-					// domain min lenght and max lenght
+					// domain min lenght and max length
 					listvalidator.ValueStringsAre(stringvalidator.LengthBetween(3, 255)),
 				},
 			},
