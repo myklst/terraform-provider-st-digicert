@@ -7,13 +7,13 @@ Supported Versions
 
 | Terraform version | minimum provider version |maxmimum provider version
 | ---- | ---- | ----|
-| >= 1.3.x	| 0.1.0	| latest |
+| >= 1.3.x | 0.1.0 | latest |
 
 Requirements
 ------------
 
--	[Terraform](https://www.terraform.io/downloads.html) 1.3.x
--	[Go](https://golang.org/doc/install) 1.23 (to build the provider plugin)
+- [Terraform](https://www.terraform.io/downloads.html) 1.3.x
+- [Go](https://golang.org/doc/install) 1.23 (to build the provider plugin)
 
 Local Installation
 ------------------

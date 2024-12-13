@@ -9,7 +9,7 @@ import (
 
 	alidns "github.com/alibabacloud-go/alidns-20150109/v2/client"
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/alicloud"
 )
@@ -18,8 +18,7 @@ type Alidns struct {
 	Client *alidns.Client
 }
 
-func (a *Alidns) GetAllDnsRecords(domain string) ([]*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, error) {
-	// Get all DNS records
+func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
 	describeDomainRecordsRequest := &alidns.DescribeDomainRecordsRequest{
 		DomainName: tea.String(domain),
 		PageSize:   tea.Int64(500), // AliCloud maximum allow 500 records. It's
@@ -34,7 +33,7 @@ func (a *Alidns) GetAllDnsRecords(domain string) ([]*alidns.DescribeDomainRecord
 	return response.Body.DomainRecords.Record, err
 }
 
-func (a *Alidns) GetDnsRecord(domain, rrType, subdomain string) ([]*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, error) {
+func (a *Alidns) GetDnsRecord(domain, rrType, subdomain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
 	describeDomainRecordsRequest := &alidns.DescribeDomainRecordsRequest{
 		DomainName:  tea.String(domain),
 		TypeKeyWord: tea.String(rrType),
@@ -48,7 +47,7 @@ func (a *Alidns) GetDnsRecord(domain, rrType, subdomain string) ([]*alidns.Descr
 	return response.Body.DomainRecords.Record, nil
 }
 
-func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (string, error) {
+func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (recordID string, err error) {
 	addDomainRecordRequest := &alidns.AddDomainRecordRequest{
 		DomainName: tea.String(domain),
 		RR:         tea.String(rr),
@@ -63,7 +62,7 @@ func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (string, error) 
 	return *response.Body.RecordId, nil
 }
 
-func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) error {
+func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) (err error) {
 	updateDomainRecordRequest := &alidns.UpdateDomainRecordRequest{
 		RecordId: tea.String(id),
 		RR:       tea.String(subdomain),
@@ -77,7 +76,7 @@ func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) error {
 	return nil
 }
 
-func (a *Alidns) DeleteDnsRecord(id string) error {
+func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	deleteDomainRecordRequest := &alidns.DeleteDomainRecordRequest{
 		RecordId: tea.String(id),
 	}

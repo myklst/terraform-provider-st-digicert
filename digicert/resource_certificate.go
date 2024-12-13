@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int32validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
@@ -432,7 +432,6 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 
 	// Read Terraform plan data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -525,7 +524,7 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 				return
 			}
 		} else {
-			// if the domain is still valid but fail dns challenge, (validated domain before but redo dns challenge)
+			// if the domain is still valid but fail dns challenge, (redo dns challenge but domain still valid since validated domain before)
 			// it will still able to place order, even the dns challenge is fail.
 			resp.Diagnostics.AddWarning("DNS Challange fail, but the cert is still issued since the domain is still valid to use.", challengeErr.Error())
 		}
@@ -883,7 +882,7 @@ func (r *CertificateResource) ModifyPlan(ctx context.Context, req resource.Modif
 	}
 }
 
-func (r *CertificateResource) certificateHasExpired(minDaysRemaining int, certValidTill string) (bool, error) {
+func (r *CertificateResource) certificateHasExpired(minDaysRemaining int, certValidTill string) (hasExpired bool, err error) {
 	certValidTillDate, err := time.Parse("2006-01-02", certValidTill)
 	if err != nil {
 		return false, err

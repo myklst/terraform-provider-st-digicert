@@ -14,7 +14,6 @@ type Config struct {
 
 func (c *Config) Client() (*digicertapi.Client, error) {
 	client, err := digicertapi.NewClient(c.ApiKey)
-
 	if err != nil {
 		return nil, fmt.Errorf("error setting up client: %s", err)
 	}

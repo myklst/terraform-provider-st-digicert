@@ -44,7 +44,7 @@ func (c *Cloudflare) GetDNSRecordsByDomainName(domainName string) (dnsRecords []
 	return dnsRecords, nil
 }
 
-func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType string, ttl int) error {
+func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType string, ttl int) (err error) {
 	zoneID, err := c.Client.ZoneIDByName(domainName)
 	if err != nil {
 		return nil
@@ -65,7 +65,7 @@ func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType
 	return nil
 }
 
-func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) error {
+func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) (err error) {
 	zoneID, err := c.Client.ZoneIDByName(domainName)
 	if err != nil {
 		return nil

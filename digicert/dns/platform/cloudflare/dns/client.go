@@ -10,12 +10,9 @@ type Cloudflare struct {
 	Client *cloudflare.API
 }
 
-func NewClient(apiToken string) (*Cloudflare, error) {
+func NewClient(apiToken string) (cf *Cloudflare, err error) {
 	client, err := cloudflare.NewWithAPIToken(apiToken)
-	if err != nil {
-		return nil, err
-	}
 	return &Cloudflare{
 		Client: client,
-	}, nil
+	}, err
 }

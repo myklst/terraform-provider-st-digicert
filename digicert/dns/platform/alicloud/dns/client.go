@@ -10,12 +10,12 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 )
 
-func NewClient(accessKey, secretKey string) (*Alidns, error) {
+func NewClient(accessKey, secretKey string) (dns *Alidns, err error) {
 	if accessKey == "" {
-		return nil, fmt.Errorf("dns newClient(): missing access_key")
+		return nil, fmt.Errorf("dns.newClient(): missing access_key")
 	}
 	if secretKey == "" {
-		return nil, fmt.Errorf("dns newClient(): missing secret_key")
+		return nil, fmt.Errorf("dns.newClient(): missing secret_key")
 	}
 
 	config := &openapi.Config{
@@ -25,6 +25,7 @@ func NewClient(accessKey, secretKey string) (*Alidns, error) {
 
 	config.Endpoint = tea.String("alidns.cn-hongkong.aliyuncs.com")
 	client, err := alidns.NewClient(config)
+	
 	return &Alidns{
 		Client: client,
 	}, err

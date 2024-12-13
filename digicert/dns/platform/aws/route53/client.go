@@ -11,12 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 )
 
-func NewClient(accessKey, secretKey string) (*Rout53, error) {
+func NewClient(accessKey, secretKey string) (awsRoute53 *Rout53, err error) {
 	if accessKey == "" {
-		return nil, fmt.Errorf("aws newClient(): missing access_key")
+		return nil, fmt.Errorf("aws.newClient(): missing access_key")
 	}
 	if secretKey == "" {
-		return nil, fmt.Errorf("aws newClient(): missing secret_key")
+		return nil, fmt.Errorf("aws.newClient(): missing secret_key")
 	}
 
 	svcEndpoint := "route53.amazonaws.com"
