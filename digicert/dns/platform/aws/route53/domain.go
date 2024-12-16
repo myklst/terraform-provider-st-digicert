@@ -78,7 +78,7 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 	return hostedZoneIds, nil
 }
 
-func (r *Rout53) ChangeResourceRecordSets(action, domain, verifyTxtContent, hostedZoneId string) (resp *route53.ChangeResourceRecordSetsOutput, err error) {
+func (r *Rout53) changeResourceRecordSets(action, domain, verifyTxtContent, hostedZoneId string) (resp *route53.ChangeResourceRecordSetsOutput, err error) {
 	req := &route53.ChangeResourceRecordSetsInput{
 		HostedZoneId: aws.String(hostedZoneId),
 		ChangeBatch: &route53.ChangeBatch{
@@ -101,37 +101,34 @@ func (r *Rout53) ChangeResourceRecordSets(action, domain, verifyTxtContent, host
 		},
 	}
 
-	resp, err = r.Client.ChangeResourceRecordSets(req)
-	if err != nil {
-		return nil, err
+	changeRecord := func() error {
+		if resp, err = r.Client.ChangeResourceRecordSets(req); err != nil {
+			logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
+			if aerr, ok := err.(awserr.Error); ok {
+				errCode := aerr.Code()
+				tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 modify record Error: %s", err.Error()))
+				if awsErrCommon.IsPermanentCommonError(errCode) {
+					return backoff.Permanent(fmt.Errorf("permanent err:\n%w", aerr))
+				}
+				return aerr
+			}
+		}
+		return nil
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
+	if err := backoff.Retry(changeRecord, reconnectBackoff); err != nil {
+		return resp, fmt.Errorf("modifyRoute53Record() Failed to create verification TXT record: %v", err)
 	}
 
 	return resp, nil
 }
 
 func (r *Rout53) ModifyAWSRoute53Record(action, commonName, token string, hostedZoneIds []string) (err error) {
-	b := backoff.NewExponentialBackOff()
-	b.MaxElapsedTime = 10 * time.Minute // Set maximum wait time to 10 minutes
-
 	for _, hostedZoneId := range hostedZoneIds {
-		changeRecord := func() error {
-			if _, err := r.ChangeResourceRecordSets(action, commonName, token, hostedZoneId); err != nil {
-				logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
-				if aerr, ok := err.(awserr.Error); ok {
-					errCode := aerr.Code()
-					tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 modify record Error: %s", err.Error()))
-					if awsErrCommon.IsPermanentCommonError(errCode) {
-						return backoff.Permanent(fmt.Errorf("permanent err:\n%w", aerr))
-					}
-					return aerr
-				}
-			}
-			return nil
-		}
-		reconnectBackoff := backoff.NewExponentialBackOff()
-		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-		if err := backoff.Retry(changeRecord, reconnectBackoff); err != nil {
-			return fmt.Errorf("modifyRoute53Record() Failed to create verification TXT record: %v", err)
+		if _, err := r.changeResourceRecordSets(action, commonName, token, hostedZoneId); err != nil {
+			logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
+			return err
 		}
 	}
 
