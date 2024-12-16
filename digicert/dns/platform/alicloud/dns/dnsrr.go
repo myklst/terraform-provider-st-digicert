@@ -34,21 +34,6 @@ func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.Descri
 	return response.Body.DomainRecords.Record, err
 }
 
-func (a *Alidns) GetDnsRecord(domain, rrType, subdomain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
-	describeDomainRecordsRequest := &alidns.DescribeDomainRecordsRequest{
-		DomainName:  tea.String(domain),
-		TypeKeyWord: tea.String(rrType),
-		RRKeyWord:   tea.String(subdomain),
-	}
-
-	response, err := a.Client.DescribeDomainRecords(describeDomainRecordsRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	return response.Body.DomainRecords.Record, nil
-}
-
 func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (recordID string, err error) {
 	addDomainRecordRequest := &alidns.AddDomainRecordRequest{
 		DomainName: tea.String(domain),
@@ -84,11 +69,20 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	deleteDomainRecordRequest := &alidns.DeleteDomainRecordRequest{
 		RecordId: tea.String(id),
 	}
-
-	if _, err := a.Client.DeleteDomainRecord(deleteDomainRecordRequest); err != nil {
-		return err
+	deleteDnsRecord := func() error {
+		if _, err := a.Client.DeleteDomainRecord(deleteDomainRecordRequest); err != nil {
+			if alicloud.IsPermanentCommonError(err.Error()) {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+		return nil
 	}
-
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
+	if err := backoff.Retry(deleteDnsRecord, reconnectBackoff); err != nil {
+		return fmt.Errorf("Alidns delete dns record. Failed to Delete dns record: %v", err)
+	}
 	return nil
 }
 
@@ -99,7 +93,7 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 	}
 
 	if len(dnsRecords) == 0 {
-		return "", fmt.Errorf("domain name not found in AWS route53")
+		return "", fmt.Errorf("domain name not found in Alidns")
 	}
 
 	var foundDnsRecord *alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord
@@ -124,7 +118,6 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 			}
 			return nil
 		}
-
 		reconnectBackoff := backoff.NewExponentialBackOff()
 		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
 		if err := backoff.Retry(addRecord, reconnectBackoff); err != nil {
@@ -144,7 +137,6 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 		}
 		return nil
 	}
-
 	reconnectBackoff := backoff.NewExponentialBackOff()
 	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
 	if err := backoff.Retry(updateRecord, reconnectBackoff); err != nil {

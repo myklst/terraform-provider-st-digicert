@@ -26,30 +26,6 @@ type Rout53 struct {
 	Client *route53.Route53
 }
 
-func (r *Rout53) ListAllDomains() (hostedZoneList []*route53.HostedZone, err error) {
-	req := &route53.ListHostedZonesInput{}
-
-	for {
-		result, err := r.Client.ListHostedZones(req)
-		if err != nil {
-			return nil, err
-		}
-
-		// Store the hosted zones from the current page.
-		hostedZoneList = append(hostedZoneList, result.HostedZones...)
-
-		// If there are more pages, set the marker to the NextMarker from the current page
-		if *result.IsTruncated {
-			req.Marker = result.NextMarker
-		} else {
-			// If there are no more pages, break out of the loop
-			break
-		}
-	}
-
-	return hostedZoneList, nil
-}
-
 func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []string, err error) {
 	domain = fmt.Sprintf("%s.", domain) // AWS hosted zone format, Ensure the domain name ends with a dot (.)
 
@@ -59,9 +35,27 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 	}
 
 	for {
-		result, err := r.Client.ListHostedZonesByName(req)
-		if err != nil {
-			return nil, err
+		var result *route53.ListHostedZonesByNameOutput
+		listHostedZonesByName := func() error {
+			result, err = r.Client.ListHostedZonesByName(req)
+			if err != nil {
+				logrus.Errorf("Failed to list hosted zones by name: %v", err)
+				if aerr, ok := err.(awserr.Error); ok {
+					errCode := aerr.Code()
+					tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 list hosted zones by name Error: %s", err.Error()))
+					if awsErrCommon.IsPermanentCommonError(errCode) {
+						return backoff.Permanent(fmt.Errorf("permanent err:\n%w", aerr))
+					}
+					return aerr
+				}
+				return err
+			}
+			return nil
+		}
+		reconnectBackoff := backoff.NewExponentialBackOff()
+		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
+		if err := backoff.Retry(listHostedZonesByName, reconnectBackoff); err != nil {
+			return hostedZoneIds, fmt.Errorf("ListHostedZonesByName() Failed to list hosted zone by name: %v", err)
 		}
 
 		for _, zone := range result.HostedZones {
@@ -82,44 +76,6 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 	}
 
 	return hostedZoneIds, nil
-}
-
-func (r *Rout53) ListReusableDelegationSets() (resp *route53.ListReusableDelegationSetsOutput, err error) {
-	resp, err = r.Client.ListReusableDelegationSets(&route53.ListReusableDelegationSetsInput{})
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-}
-
-func (r *Rout53) CreateHostedZone(domain, delegationSetId string) (resp *route53.CreateHostedZoneOutput, err error) {
-	req := &route53.CreateHostedZoneInput{
-		Name:            aws.String(domain),
-		DelegationSetId: aws.String(delegationSetId),
-		// Required: CallerReference, used unique timestamp for request.
-		CallerReference: aws.String(time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05 MST")),
-	}
-
-	resp, err = r.Client.CreateHostedZone(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-}
-
-func (r *Rout53) DeleteHostedZone(hostedZoneId string) (resp *route53.DeleteHostedZoneOutput, err error) {
-	req := &route53.DeleteHostedZoneInput{
-		Id: aws.String(hostedZoneId),
-	}
-
-	resp, err = r.Client.DeleteHostedZone(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
 }
 
 func (r *Rout53) ChangeResourceRecordSets(action, domain, verifyTxtContent, hostedZoneId string) (resp *route53.ChangeResourceRecordSetsOutput, err error) {
@@ -172,7 +128,6 @@ func (r *Rout53) ModifyAWSRoute53Record(action, commonName, token string, hosted
 			}
 			return nil
 		}
-
 		reconnectBackoff := backoff.NewExponentialBackOff()
 		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
 		if err := backoff.Retry(changeRecord, reconnectBackoff); err != nil {
