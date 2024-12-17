@@ -22,6 +22,10 @@ const (
 	ORGANIZATION_ENDPOINT                = "https://www.digicert.com/services/v2/organization"
 )
 
+type Organization struct {
+	ID int `json:"id"`
+}
+
 type OrderPayload struct {
 	Certificate      CertificatePayload   `json:"certificate"`
 	Organization     Organization         `json:"organization"`
@@ -44,61 +48,8 @@ type CertificatePayload struct {
 	PrivateKey       string             `json:"-"`
 }
 
-type DomainPayload struct {
-	Name         string       `json:"name"`
-	Organization Organization `json:"organization"`
-	Validations  []Validation `json:"validations"`
-	DcvMethod    string       `json:"dcv_method"`
-}
-
 type OrderValidityPayload struct {
 	Days int `json:"days,omitempty"`
-}
-
-type OrderListRespBody struct {
-	Orders   []OrderRespBody `json:"orders"`
-	ErrorMsg []ErrorMsg      `json:"errors"`
-}
-
-type OrderRespBody struct {
-	ID             int         `json:"id"`
-	Certificate    Certificate `json:"certificate"`
-	Status         string      `json:"status"`
-	OrderValidTill string      `json:"order_valid_till"`
-	IsRenewed      bool        `json:"is_renewed"`
-	ErrorMsg       []ErrorMsg  `json:"errors"`
-}
-
-type ProductListRespBody struct {
-	Products []Product `json:"products"`
-}
-
-type Product struct {
-	NameID string `json:"name_id"`
-	Name   string `json:"name"`
-}
-
-type IntermediateListRespBody struct {
-	Intermediates []Intermediates `json:"intermediates"`
-}
-
-type Intermediates struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	IssuerCommonName  string `json:"issuer_common_name"`
-}
-
-type Certificate struct {
-	ID               int                `json:"id"`
-	Status           string             `json:"status"`
-	CommonName       string             `json:"common_name"`
-	ValidTill        string             `json:"valid_till"`
-	CertificateChain []CertificateChain `json:"certificate_chain"`
-	Organization     Organization       `json:"organization"`
-	CSR              string             `json:"csr"`
-	PrivateKey       string             `json:"-"`
-	CertificatePem   string             `json:"-"`
-	IssuerPem        string             `json:"-"`
-	RootPem          string             `json:"-"`
 }
 
 type IssueCertRespBody struct {
@@ -119,55 +70,6 @@ type DomainRespBody struct {
 	ID       int      `json:"id"`
 	Name     string   `json:"name"`
 	DcvToken DcvToken `json:"dcv_token"`
-}
-
-type CertificateChainList struct {
-	CertificateChain []CertificateChain `json:"intermediates"`
-}
-
-type CertificateChain struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	Pem               string `json:"pem"`
-}
-
-type Organization struct {
-	ID int `json:"id"`
-}
-
-type DomainListRespBody struct {
-	Domains  []Domain   `json:"domains"`
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type Domain struct {
-	ID                  int      `json:"id"`
-	Name                string   `json:"name"`
-	IsPendingValidation bool     `json:"is_pending_validation"`
-	DcvToken            DcvToken `json:"dcv_token"`
-}
-
-type Validation struct {
-	Type string `json:"type"`
-}
-
-type AddDomainRespBody struct {
-	ID       int        `json:"id"`
-	DcvToken DcvToken   `json:"dcv_token"`
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type DcvToken struct {
-	Token  string `json:"token"`
-	Status string `json:"status"`
-}
-
-type ErrorMsgList struct {
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type ErrorMsg struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
 }
 
 func (c *Client) IssueCert(orderPayLoad OrderPayload) (issueCert IssueCertRespBody, err error) {
@@ -218,56 +120,18 @@ func (c *Client) ReissueCert(orderPayload OrderPayload, orderID int) (issueCert 
 	return issueCert, nil
 }
 
-func (c *Client) RevokeCert(certId int) (err error) {
-	url := fmt.Sprintf("%s/%d/revoke", CERT_ENDPOINT, certId)
-	payloadJson := []byte(`{
-		"skip_approval": true
-	}`)
-
-	resp, err := c.httpResponse(http.MethodPut, url, payloadJson)
-	if err != nil {
-		return err
-	}
-
-	// resp length == 0, mean revoke certificate successfully
-	if len(resp) != 0 {
-		var errMsgList ErrorMsgList
-		if err := json.Unmarshal(resp, &errMsgList); err != nil {
-			return err
-		}
-
-		if len(errMsgList.ErrorMsg) != 0 {
-			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
-		}
-	}
-
-	return nil
+type OrderListRespBody struct {
+	Orders   []OrderRespBody `json:"orders"`
+	ErrorMsg []ErrorMsg      `json:"errors"`
 }
 
-func (c *Client) RevokeAllCert(orderId int) (err error) {
-	url := fmt.Sprintf("%s/%d/revoke", ORDER_ENDPOINT, orderId)
-	jsonPayload := []byte(`{
-		"skip_approval": true
-		}`)
-
-	resp, err := c.httpResponse(http.MethodPut, url, jsonPayload)
-	if err != nil {
-		return err
-	}
-
-	// resp length == 0, mean revoke certificate successfully
-	if len(resp) != 0 {
-		var errMsgList ErrorMsgList
-		if err := json.Unmarshal(resp, &errMsgList); err != nil {
-			return err
-		}
-
-		if len(errMsgList.ErrorMsg) != 0 {
-			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
-		}
-	}
-
-	return nil
+type OrderRespBody struct {
+	ID             int         `json:"id"`
+	Certificate    Certificate `json:"certificate"`
+	Status         string      `json:"status"`
+	OrderValidTill string      `json:"order_valid_till"`
+	IsRenewed      bool        `json:"is_renewed"`
+	ErrorMsg       []ErrorMsg  `json:"errors"`
 }
 
 func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err error) {
@@ -323,23 +187,73 @@ func (c *Client) GetOrderInfo(orderId int) (order OrderRespBody, err error) {
 	return order, err
 }
 
-func (c *Client) CancelOrderRequest(orderId int) (err error) {
-	url := fmt.Sprintf("%s/%d/status", ORDER_ENDPOINT, orderId)
-	payloadJson := []byte(`{
-		"status": "canceled",
-		"note": "Fail validate domain."
-	}`)
+type Certificate struct {
+	ID               int                `json:"id"`
+	Status           string             `json:"status"`
+	CommonName       string             `json:"common_name"`
+	ValidTill        string             `json:"valid_till"`
+	CertificateChain []CertificateChain `json:"certificate_chain"`
+	Organization     Organization       `json:"organization"`
+	CSR              string             `json:"csr"`
+	PrivateKey       string             `json:"-"`
+	CertificatePem   string             `json:"-"`
+	IssuerPem        string             `json:"-"`
+	RootPem          string             `json:"-"`
+}
 
-	ordStatusResp, err := c.httpResponse(http.MethodPut, url, payloadJson)
+type CertificateChainList struct {
+	CertificateChain []CertificateChain `json:"intermediates"`
+}
+
+type CertificateChain struct {
+	SubjectCommonName string `json:"subject_common_name"`
+	Pem               string `json:"pem"`
+}
+
+func (c *Client) GetCertificateChain(certID int) (certificateChains []CertificateChain, err error) {
+	url := fmt.Sprintf("%s/%d/chain", CERT_ENDPOINT, certID)
+	resp, err := c.httpResponse(http.MethodGet, url, nil)
 	if err != nil {
-		return err
-	}
-	// Success will not return any response
-	if len(ordStatusResp) != 0 {
-		return err
+		return certificateChains, err
 	}
 
-	return nil
+	var certificateChainList CertificateChainList
+	if err := json.Unmarshal(resp, &certificateChainList); err != nil {
+		return certificateChains, err
+	}
+
+	return certificateChainList.CertificateChain, nil
+}
+
+type IntermediateListRespBody struct {
+	Intermediates []Intermediates `json:"intermediates"`
+}
+
+type Intermediates struct {
+	SubjectCommonName string `json:"subject_common_name"`
+	IssuerCommonName  string `json:"issuer_common_name"`
+}
+
+func (c *Client) GetIntermediateList() (intermediateList IntermediateListRespBody, err error) {
+	resp, err := c.httpResponse(http.MethodGet, INTERMEDIATE_ENDPOINT, nil)
+	if err != nil {
+		return intermediateList, err
+	}
+
+	if err := json.Unmarshal(resp, &intermediateList); err != nil {
+		return intermediateList, err
+	}
+
+	return intermediateList, nil
+}
+
+type ProductListRespBody struct {
+	Products []Product `json:"products"`
+}
+
+type Product struct {
+	NameID string `json:"name_id"`
+	Name   string `json:"name"`
 }
 
 func (c *Client) GetProductList() (productList ProductListRespBody, err error) {
@@ -354,17 +268,21 @@ func (c *Client) GetProductList() (productList ProductListRespBody, err error) {
 	return productList, nil
 }
 
-func (c *Client) GetIntermediateList() (intermediateList IntermediateListRespBody, err error) {
-	resp, err := c.httpResponse(http.MethodGet, INTERMEDIATE_ENDPOINT, nil)
-	if err != nil {
-		return intermediateList, err
-	}
+type DomainListRespBody struct {
+	Domains  []Domain   `json:"domains"`
+	ErrorMsg []ErrorMsg `json:"errors"`
+}
 
-	if err := json.Unmarshal(resp, &intermediateList); err != nil {
-		return intermediateList, err
-	}
+type Domain struct {
+	ID                  int      `json:"id"`
+	Name                string   `json:"name"`
+	IsPendingValidation bool     `json:"is_pending_validation"`
+	DcvToken            DcvToken `json:"dcv_token"`
+}
 
-	return intermediateList, nil
+type DcvToken struct {
+	Token  string `json:"token"`
+	Status string `json:"status"`
 }
 
 func (c *Client) GetDomainsList() (domains []Domain, err error) {
@@ -397,6 +315,15 @@ func (c *Client) GetDomainInfo(domainID int) (domain Domain, err error) {
 	return domain, nil
 }
 
+type ErrorMsgList struct {
+	ErrorMsg []ErrorMsg `json:"errors"`
+}
+
+type ErrorMsg struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 func (c *Client) CheckDomainDCV(domainID int) (err error) {
 	url := fmt.Sprintf("%s/%d/dcv/validate-token", DOMAIN_ENDPOINT, domainID)
 
@@ -418,17 +345,73 @@ func (c *Client) CheckDomainDCV(domainID int) (err error) {
 	return nil
 }
 
-func (c *Client) GetCertificateChain(certID int) (certificateChains []CertificateChain, err error) {
-	url := fmt.Sprintf("%s/%d/chain", CERT_ENDPOINT, certID)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
+func (c *Client) RevokeCert(certId int) (err error) {
+	url := fmt.Sprintf("%s/%d/revoke", CERT_ENDPOINT, certId)
+	payloadJson := []byte(`{
+		"skip_approval": true
+	}`)
+
+	resp, err := c.httpResponse(http.MethodPut, url, payloadJson)
 	if err != nil {
-		return certificateChains, err
+		return err
 	}
 
-	var certificateChainList CertificateChainList
-	if err := json.Unmarshal(resp, &certificateChainList); err != nil {
-		return certificateChains, err
+	// resp length == 0, mean revoke certificate successfully
+	if len(resp) != 0 {
+		var errMsgList ErrorMsgList
+		if err := json.Unmarshal(resp, &errMsgList); err != nil {
+			return err
+		}
+
+		if len(errMsgList.ErrorMsg) != 0 {
+			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
+		}
 	}
 
-	return certificateChainList.CertificateChain, nil
+	return nil
+}
+
+func (c *Client) RevokeAllCert(orderId int) (err error) {
+	url := fmt.Sprintf("%s/%d/revoke", ORDER_ENDPOINT, orderId)
+	jsonPayload := []byte(`{
+		"skip_approval": true
+		}`)
+
+	resp, err := c.httpResponse(http.MethodPut, url, jsonPayload)
+	if err != nil {
+		return err
+	}
+
+	// resp length == 0, mean revoke certificate successfully
+	if len(resp) != 0 {
+		var errMsgList ErrorMsgList
+		if err := json.Unmarshal(resp, &errMsgList); err != nil {
+			return err
+		}
+
+		if len(errMsgList.ErrorMsg) != 0 {
+			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) CancelOrderRequest(orderId int) (err error) {
+	url := fmt.Sprintf("%s/%d/status", ORDER_ENDPOINT, orderId)
+	payloadJson := []byte(`{
+		"status": "canceled",
+		"note": "Fail validate domain."
+	}`)
+
+	ordStatusResp, err := c.httpResponse(http.MethodPut, url, payloadJson)
+	if err != nil {
+		return err
+	}
+	// Success will not return any response
+	if len(ordStatusResp) != 0 {
+		return err
+	}
+
+	return nil
 }
