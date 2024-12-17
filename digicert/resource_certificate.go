@@ -54,6 +54,7 @@ const (
 	SIGNATURE_HASH            = "sha256"
 	DCV_METHOD                = "dns-txt-token"
 	PAYMENT_METHOD            = "balance"
+	MAX_ELAPSED_TIME          = 10 * time.Minute
 )
 
 var (
@@ -967,8 +968,8 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 				return nil
 			}
 
-			// DNS Cached, Retry for 6 minutes
-			if err = backoff_retry.RetryOperator(checkDomain, 6*time.Minute); err != nil {
+			// DNS Cached, Retry for 10 minutes
+			if err = backoff_retry.RetryOperator(checkDomain, MAX_ELAPSED_TIME); err != nil {
 				return err
 			}
 		}
