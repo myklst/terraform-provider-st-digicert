@@ -5,11 +5,17 @@ package cloudflaredns
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/cloudflare/cloudflare-go"
 )
 
-func (c *Cloudflare) CreateDNSRecord(domainName, recordName, content, rrType string, ttl int) (dnsRecordID string, err error) {
+const (
+	MAX_ELAPSED_TIME = 5 * time.Minute // clouflare API rate limit, 1200 requests per five minute
+)
+
+func (c *Cloudflare) createDNSRecord(domainName, recordName, content, rrType string, ttl int) (dnsRecordID string, err error) {
 	zoneID, err := c.Client.ZoneIDByName(domainName)
 	if err != nil {
 		return "", nil
@@ -23,29 +29,46 @@ func (c *Cloudflare) CreateDNSRecord(domainName, recordName, content, rrType str
 		TTL:     ttl,
 	}
 
-	dnsRecord, err := c.Client.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), createDNS)
-	if err != nil {
-		return "", err
+	var dnsRecord cloudflare.DNSRecord
+	createDNSRecord := func() error {
+		dnsRecord, err = c.Client.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), createDNS)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
+	if err := backoff.Retry(createDNSRecord, reconnectBackoff); err != nil {
+		return "", fmt.Errorf("createDNSRecord() Failed to create dns records on cloudflare: %v", err)
 	}
 
 	return dnsRecord.ID, nil
 }
 
-func (c *Cloudflare) GetDNSRecordsByDomainName(domainName string) (dnsRecords []cloudflare.DNSRecord, err error) {
+func (c *Cloudflare) getDNSRecordsByDomainName(domainName string) (dnsRecords []cloudflare.DNSRecord, err error) {
 	zoneID, err := c.Client.ZoneIDByName(domainName)
 	if err != nil {
 		return dnsRecords, nil
 	}
 
-	dnsRecords, _, err = c.Client.ListDNSRecords(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.ListDNSRecordsParams{})
-	if err != nil {
-		return dnsRecords, err
+	listDNSRercords := func() error {
+		dnsRecords, _, err = c.Client.ListDNSRecords(context.Background(), cloudflare.ZoneIdentifier(zoneID), cloudflare.ListDNSRecordsParams{})
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
+	if err := backoff.Retry(listDNSRercords, reconnectBackoff); err != nil {
+		return dnsRecords, fmt.Errorf("listDNSRercords() Failed to list dns records on cloudflare: %v", err)
 	}
 
 	return dnsRecords, nil
 }
 
-func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType string, ttl int) (err error) {
+func (c *Cloudflare) updateDNSRecord(domainName, id, recordName, content, rrType string, ttl int) (err error) {
 	zoneID, err := c.Client.ZoneIDByName(domainName)
 	if err != nil {
 		return nil
@@ -60,10 +83,17 @@ func (c *Cloudflare) UpdateDNSRecord(domainName, id, recordName, content, rrType
 		TTL:     ttl,
 	}
 
-	if _, err := c.Client.UpdateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), updateDns); err != nil {
-		return err
+	updateDNSRercords := func() error {
+		if _, err := c.Client.UpdateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), updateDns); err != nil {
+			return err
+		}
+		return nil
 	}
-
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
+	if err := backoff.Retry(updateDNSRercords, reconnectBackoff); err != nil {
+		return fmt.Errorf("updateDNSRercords() Failed to update dns records on cloudflare: %v", err)
+	}
 	return nil
 }
 
@@ -73,34 +103,42 @@ func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) (err error) {
 		return nil
 	}
 
-	if err := c.Client.DeleteDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), recordId); err != nil {
-		return err
+	deleteDNSRercords := func() error {
+		if err := c.Client.DeleteDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), recordId); err != nil {
+			return err
+		}
+		return nil
+	}
+	reconnectBackoff := backoff.NewExponentialBackOff()
+	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
+	if err := backoff.Retry(deleteDNSRercords, reconnectBackoff); err != nil {
+		return fmt.Errorf("DeleteDNSRercords() Failed to delete dns record on cloudflare: %v", err)
 	}
 
 	return nil
 }
 
 func (c *Cloudflare) UpdateRecord(domainName, token string) (dnsRecordID string, err error) {
-	dnsRecords, err := c.GetDNSRecordsByDomainName(domainName)
+	dnsRecords, err := c.getDNSRecordsByDomainName(domainName)
 	if err != nil {
 		return "", err
 	}
-
 	if len(dnsRecords) == 0 {
 		return "", fmt.Errorf("no DNS records were found")
 	}
 
+	ttl := 300
 	for _, dnsRecord := range dnsRecords {
 		if dnsRecord.Type == "TXT" {
 			// Upated
-			if err := c.UpdateDNSRecord(domainName, dnsRecord.ID, domainName, token, dnsRecord.Type, 300); err != nil {
+			if err := c.updateDNSRecord(domainName, dnsRecord.ID, domainName, token, dnsRecord.Type, ttl); err != nil {
 				return "", err
 			}
 			return dnsRecord.ID, nil
 		}
 	}
 
-	dnsRecordID, err = c.CreateDNSRecord(domainName, domainName, token, "TXT", 300)
+	dnsRecordID, err = c.createDNSRecord(domainName, domainName, token, "TXT", ttl)
 	if err != nil {
 		return "", err
 	}
