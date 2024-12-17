@@ -25,7 +25,7 @@ func main() {
 
 	providerAddress := os.Getenv("PROVIDER_LOCAL_PATH")
 	if providerAddress == "" {
-		providerAddress = "registry.terraform.io/myklst/st-cdnetworks"
+		providerAddress = "registry.terraform.io/myklst/st-digicert"
 	}
 	opts := providerserver.ServeOpts{
 		Address: providerAddress,

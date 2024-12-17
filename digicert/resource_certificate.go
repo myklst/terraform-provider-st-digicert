@@ -8,9 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -99,154 +97,6 @@ type CertificateResourceModel struct {
 type DNSChallenge struct {
 	Provider types.String `tfsdk:"provider"`
 	Config   types.Map    `tfsdk:"config"`
-}
-
-type OrderPayload struct {
-	Certificate      CertificatePayload   `json:"certificate"`
-	Organization     Organization         `json:"organization"`
-	OrderValidity    OrderValidityPayload `json:"order_validity,omitempty"`
-	PaymentMethod    string               `json:"payment_method"`
-	RenewalOfOrderID int                  `json:"renewal_of_order_id"`
-	DcvMethod        string               `json:"dcv_method"`
-}
-
-type CertificatePayload struct {
-	ID               int                `json:"certificate_id"`
-	Organization     Organization       `json:"organization"`
-	CommonName       string             `json:"common_name"`
-	DNSNames         []string           `json:"dns_names"`
-	CSR              string             `json:"csr"`
-	SignatureHash    string             `json:"signature_hash"`
-	CACertID         string             `json:"ca_cert_id"`
-	CertificateChain []CertificateChain `json:"certificate_chain"`
-	Error            []ErrorMsg         `json:"errors"`
-	PrivateKey       string             `json:"-"`
-}
-
-type DomainPayload struct {
-	Name         string       `json:"name"`
-	Organization Organization `json:"organization"`
-	Validations  []Validation `json:"validations"`
-	DcvMethod    string       `json:"dcv_method"`
-}
-
-type OrderValidityPayload struct {
-	Days int `json:"days,omitempty"`
-}
-
-type OrderListRespBody struct {
-	Orders   []OrderRespBody `json:"orders"`
-	ErrorMsg []ErrorMsg      `json:"errors"`
-}
-
-type OrderRespBody struct {
-	ID             int         `json:"id"`
-	Certificate    Certificate `json:"certificate"`
-	Status         string      `json:"status"`
-	OrderValidTill string      `json:"order_valid_till"`
-	IsRenewed      bool        `json:"is_renewed"`
-	ErrorMsg       []ErrorMsg  `json:"errors"`
-}
-
-type ProductListRespBody struct {
-	Products []Product `json:"products"`
-}
-
-type Product struct {
-	NameID string `json:"name_id"`
-	Name   string `json:"name"`
-}
-
-type IntermediateListRespBody struct {
-	Intermediates []Intermediates `json:"intermediates"`
-}
-
-type Intermediates struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	IssuerCommonName  string `json:"issuer_common_name"`
-}
-
-type Certificate struct {
-	ID               int                `json:"id"`
-	Status           string             `json:"status"`
-	CommonName       string             `json:"common_name"`
-	ValidTill        string             `json:"valid_till"`
-	CertificateChain []CertificateChain `json:"certificate_chain"`
-	Organization     Organization       `json:"organization"`
-	CSR              string             `json:"csr"`
-	PrivateKey       string             `json:"-"`
-	CertificatePem   string             `json:"-"`
-	IssuerPem        string             `json:"-"`
-	RootPem          string             `json:"-"`
-}
-
-type IssueCertRespBody struct {
-	OrderID              int                `json:"id"`
-	CertificateID        int                `json:"certificate_id"`
-	CertificateChain     []CertificateChain `json:"certificate_chain"`
-	Domains              []DomainRespBody   `json:"domains"`
-	SubjectCommonName    string             `json:"subject_common_name"`
-	OrderValidTill       string             `json:"order_valid_till"`
-	DcvRandomValue       string             `json:"dcv_random_value"`
-	PrivateKey           string             `json:"-"`
-	CertificateValidTill string             `json:"-"`
-	OrderValidTillDay    int                `json:"-"`
-	ErrorMsg             []ErrorMsg         `json:"errors"`
-}
-
-type DomainRespBody struct {
-	ID       int      `json:"id"`
-	Name     string   `json:"name"`
-	DcvToken DcvToken `json:"dcv_token"`
-}
-
-type CertificateChainList struct {
-	CertificateChain []CertificateChain `json:"intermediates"`
-}
-
-type CertificateChain struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	Pem               string `json:"pem"`
-}
-
-type Organization struct {
-	ID int `json:"id"`
-}
-
-type DomainListRespBody struct {
-	Domains  []Domain   `json:"domains"`
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type Domain struct {
-	ID                  int      `json:"id"`
-	Name                string   `json:"name"`
-	IsPendingValidation bool     `json:"is_pending_validation"`
-	DcvToken            DcvToken `json:"dcv_token"`
-}
-
-type Validation struct {
-	Type string `json:"type"`
-}
-
-type AddDomainRespBody struct {
-	ID       int        `json:"id"`
-	DcvToken DcvToken   `json:"dcv_token"`
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type DcvToken struct {
-	Token  string `json:"token"`
-	Status string `json:"status"`
-}
-
-type ErrorMsgList struct {
-	ErrorMsg []ErrorMsg `json:"errors"`
-}
-
-type ErrorMsg struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
 }
 
 // With the resource.Resource implementation
@@ -442,7 +292,7 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 	// Generate CSR and private key for later used
 	dnsName := []string{}
 	plan.Sans.ElementsAs(ctx, &dnsName, false)
-	csr, privateKey, err := r.generateCSR(int(plan.OrganizationID.ValueInt32()), plan.CommonName.ValueString(), dnsName)
+	csr, privateKey, err := generateCSR(plan.CommonName.ValueString(), dnsName)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate CSR Error.", err.Error())
 		return
@@ -456,10 +306,10 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	var issueCert IssueCertRespBody
+	var issueCert digicertapi.IssueCertRespBody
 	if foundReissuableOrder {
 		// Reissue cert
-		issueCert, err = r.reissueCertificate(plan, order, csr)
+		issueCert, err = r.reissueCertificate(plan, order.ID, csr)
 		if err != nil {
 			resp.Diagnostics.AddError("Reissue certificate Error.", err.Error())
 			return
@@ -477,13 +327,14 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 		if int(plan.MinDayRemaining.ValueInt32()) > orderValidTillDays {
 			// Update Order
 			// order valid remaining days add on with the new order validity days.
+			orderValidityDays := int(plan.OrderValidityDays.ValueInt32())
 			if orderValidTillDays > 0 {
-				orderValidTillDays = int(plan.OrderValidityDays.ValueInt32()) + orderValidTillDays + 1
+				orderValidTillDays = orderValidityDays + orderValidTillDays + 1
 			} else {
-				orderValidTillDays = int(plan.OrderValidityDays.ValueInt32())
+				orderValidTillDays = orderValidityDays
 			}
 
-			issueCert, err = r.renewCertificate(plan, order.ID, csr, orderValidTillDays)
+			issueCert, err = r.renewCertificate(plan, order.ID, orderValidTillDays, csr)
 			if err != nil {
 				resp.Diagnostics.AddError("Renew certificate Error.", err.Error())
 				return
@@ -498,7 +349,7 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	ord, err := r.getOrderInfo(issueCert.OrderID)
+	ord, err := r.client.GetOrderInfo(issueCert.OrderID)
 	if err != nil {
 		resp.Diagnostics.AddError("Get Order Info Error.", err.Error())
 		return
@@ -514,7 +365,7 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 	if challengeErr := r.dnsChallenge(plan.DNSChallenge.Provider.ValueString(), dnsCreds, issueCert); challengeErr != nil {
 		if ord.Status == "pending" || ord.Certificate.Status == "pending" {
 			resp.Diagnostics.AddError("DNS Challange Error.", challengeErr.Error())
-			if err := r.cancelOrderRequest(ord.ID); err != nil {
+			if err := r.client.CancelOrderRequest(ord.ID); err != nil {
 				resp.Diagnostics.AddError("Unable to cancel order request, "+
 					"cancel the order manually on Web Console is required"+
 					"before continue using terraform to manage Digicert resource. "+
@@ -528,7 +379,7 @@ func (r *CertificateResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	certChain, err := r.getCertificateChain(issueCert.CertificateID)
+	certChain, err := r.client.GetCertificateChain(issueCert.CertificateID)
 	if err != nil {
 		resp.Diagnostics.AddError("Get Certificate Chain Error.", err.Error())
 		return
@@ -577,7 +428,7 @@ func (r *CertificateResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	var order OrderRespBody
+	var order digicertapi.OrderRespBody
 	isCertIssued := false
 	for _, orderFound := range orders {
 		if orderFound.Certificate.Status == "issued" || orderFound.Certificate.Status == "" {
@@ -617,7 +468,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	expired, err := r.certificateHasExpired(int(plan.MinDayRemaining.ValueInt32()), state.CertificateValidTill.ValueString())
+	expired, err := certificateHasExpired(int(plan.MinDayRemaining.ValueInt32()), state.CertificateValidTill.ValueString())
 	if err != nil {
 		return
 	}
@@ -635,7 +486,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	if err := r.revokeCertificate(int(state.CertificateID.ValueInt32())); err != nil {
+	if err := r.client.RevokeCert(int(state.CertificateID.ValueInt32())); err != nil {
 		resp.Diagnostics.AddError("Revoke order error.",
 			fmt.Sprintf("Error while revoking certificate for '%s', order id: %d, error: %s", state.CommonName, state.OrderID.ValueInt32(), err.Error()))
 		return
@@ -649,7 +500,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	dnsName := []string{}
 	plan.Sans.ElementsAs(ctx, &dnsName, false)
 
-	csr, privateKey, err := r.generateCSR(int(plan.OrganizationID.ValueInt32()), plan.CommonName.ValueString(), dnsName)
+	csr, privateKey, err := generateCSR(plan.CommonName.ValueString(), dnsName)
 	if err != nil {
 		resp.Diagnostics.AddError("Generate CSR Error", err.Error())
 		return
@@ -664,17 +515,12 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	orderEndDate := orderValidTillDate.AddDate(0, 0, 1)
 	orderValidTillDays := int(time.Until(orderEndDate).Hours() / 24)
 
-	var issueCert IssueCertRespBody
+	var issueCert digicertapi.IssueCertRespBody
 	// Issue or Renew for a new cert
 	// Check if the order in state is hiting the min expired remaining days' threshold.
 	if orderValidTillDays > int(plan.MinDayRemaining.ValueInt32()) {
 		// Reissue cert to the order ID.
-		order := OrderRespBody{
-			ID:             int(state.OrderID.ValueInt32()),
-			OrderValidTill: state.OrderValidTill.ValueString(),
-		}
-
-		issueCert, err = r.reissueCertificate(plan, order, csr)
+		issueCert, err = r.reissueCertificate(plan, int(state.OrderID.ValueInt32()), csr)
 		if err != nil {
 			resp.Diagnostics.AddError("Reissue Certificate Error", err.Error())
 			return
@@ -689,7 +535,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 
 		if isOrdReissuable {
 			// Reissue cert
-			issueCert, err = r.reissueCertificate(plan, order, csr)
+			issueCert, err = r.reissueCertificate(plan, order.ID, csr)
 			if err != nil {
 				resp.Diagnostics.AddError("Reissue Certificate Error", err.Error())
 				return
@@ -697,14 +543,14 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		} else {
 			// Renew order
 			// Order valid remaining validityDays add with the new expiry validityDays and the remaining expiry validityDays.
-			orderValidTillDays = int(plan.OrderValidityDays.ValueInt32()) + orderValidTillDays + 1
+			orderValidityDays := int(plan.OrderValidityDays.ValueInt32())
 			if orderValidTillDays > 0 {
-				orderValidTillDays = int(plan.OrderValidityDays.ValueInt32()) + orderValidTillDays + 1
+				orderValidTillDays = orderValidityDays + orderValidTillDays + 1
 			} else {
-				orderValidTillDays = int(plan.OrderValidityDays.ValueInt32())
+				orderValidTillDays = orderValidityDays
 			}
 
-			issueCert, err = r.renewCertificate(plan, int(state.OrderID.ValueInt32()), csr, orderValidTillDays)
+			issueCert, err = r.renewCertificate(plan, int(state.OrderID.ValueInt32()), orderValidTillDays, csr)
 			if err != nil {
 				resp.Diagnostics.AddError("Renew Certificate Error", err.Error())
 				return
@@ -712,7 +558,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		}
 	}
 
-	ord, err := r.getOrderInfo(issueCert.OrderID)
+	ord, err := r.client.GetOrderInfo(issueCert.OrderID)
 	if err != nil {
 		resp.Diagnostics.AddError("Get Order Info Error", err.Error())
 		return
@@ -728,7 +574,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 	if challengeErr := r.dnsChallenge(plan.DNSChallenge.Provider.ValueString(), dnsCreds, issueCert); challengeErr != nil {
 		if ord.Status == "pending" || ord.Certificate.Status == "pending" {
 			resp.Diagnostics.AddError("DNS Challange Error.", challengeErr.Error())
-			if err := r.cancelOrderRequest(ord.ID); err != nil {
+			if err := r.client.CancelOrderRequest(ord.ID); err != nil {
 				resp.Diagnostics.AddError("Unable to cancel order request, "+
 					"cancel the order manually on Web Console is required"+
 					"before continue using terraform to manage Digicert resource. "+
@@ -743,7 +589,7 @@ func (r *CertificateResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	certChain, err := r.getCertificateChain(issueCert.CertificateID)
+	certChain, err := r.client.GetCertificateChain(issueCert.CertificateID)
 	if err != nil {
 		resp.Diagnostics.AddError("Get Certificate Chain Error.", err.Error())
 		return
@@ -779,7 +625,7 @@ func (r *CertificateResource) Delete(ctx context.Context, req resource.DeleteReq
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 
-	if err := r.revokeCertificate(int(state.CertificateID.ValueInt32())); err != nil {
+	if err := r.client.RevokeCert(int(state.CertificateID.ValueInt32())); err != nil {
 		resp.Diagnostics.AddError("Revoke order error.",
 			fmt.Sprintf("Error while revoking certificate for '%s', order id: %d, error: %s", state.CommonName, state.OrderID.ValueInt32(), err.Error()))
 	}
@@ -848,7 +694,7 @@ func (r *CertificateResource) ModifyPlan(ctx context.Context, req resource.Modif
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 
-	expired, err := r.certificateHasExpired(int(plan.MinDayRemaining.ValueInt32()), plan.CertificateValidTill.ValueString())
+	expired, err := certificateHasExpired(int(plan.MinDayRemaining.ValueInt32()), plan.CertificateValidTill.ValueString())
 	if err != nil {
 		return
 	}
@@ -880,7 +726,7 @@ func (r *CertificateResource) ModifyPlan(ctx context.Context, req resource.Modif
 	}
 }
 
-func (r *CertificateResource) certificateHasExpired(minDaysRemaining int, certValidTill string) (hasExpired bool, err error) {
+func certificateHasExpired(minDaysRemaining int, certValidTill string) (hasExpired bool, err error) {
 	certValidTillDate, err := time.Parse("2006-01-02", certValidTill)
 	if err != nil {
 		return false, err
@@ -895,399 +741,7 @@ func (r *CertificateResource) certificateHasExpired(minDaysRemaining int, certVa
 	return false, nil
 }
 
-func (r *CertificateResource) issueCertificate(data CertificateResourceModel, csr string) (issueCert IssueCertRespBody, err error) {
-	dnsName := []string{}
-	data.Sans.ElementsAs(context.Background(), &dnsName, false)
-	product, err := r.getProductInfo(data.ProductName.ValueString())
-	if err != nil {
-		return issueCert, err
-	}
-
-	payload := OrderPayload{
-		Certificate: CertificatePayload{
-			CommonName:    data.CommonName.ValueString(),
-			DNSNames:      dnsName,
-			CSR:           csr,
-			SignatureHash: SIGNATURE_HASH,
-			CACertID:      product.NameID,
-		},
-		Organization: Organization{
-			ID: int(data.OrganizationID.ValueInt32()),
-		},
-		OrderValidity: OrderValidityPayload{
-			Days: int(data.OrderValidityDays.ValueInt32()),
-		},
-		PaymentMethod: PAYMENT_METHOD,
-		DcvMethod:     DCV_METHOD,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return issueCert, err
-	}
-
-	resp, err := r.client.IssueCert(jsonPayload, product.NameID)
-	if err != nil {
-		return issueCert, err
-	}
-
-	if err := json.Unmarshal(resp, &issueCert); err != nil {
-		return issueCert, err
-	}
-
-	if len(issueCert.ErrorMsg) != 0 {
-		return issueCert, fmt.Errorf("error issue certificate, error: %s", fmt.Sprintf("%s. %s",
-			issueCert.ErrorMsg[0].Code, issueCert.ErrorMsg[0].Message))
-	}
-
-	return issueCert, nil
-}
-
-func (r *CertificateResource) reissueCertificate(data CertificateResourceModel, order OrderRespBody, csr string) (issueCert IssueCertRespBody, err error) {
-	dnsName := []string{}
-	data.Sans.ElementsAs(context.Background(), &dnsName, false)
-	product, err := r.getProductInfo(data.ProductName.ValueString())
-	if err != nil {
-		return issueCert, err
-	}
-
-	payload := OrderPayload{
-		Certificate: CertificatePayload{
-			CommonName:    data.CommonName.ValueString(),
-			DNSNames:      dnsName,
-			CSR:           csr,
-			SignatureHash: SIGNATURE_HASH,
-			CACertID:      product.NameID,
-		},
-		DcvMethod: DCV_METHOD,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return issueCert, err
-	}
-
-	var resp []byte
-	resp, err = r.client.ReissueCert(order.ID, jsonPayload)
-	if err != nil {
-		return issueCert, err
-	}
-
-	if err = json.Unmarshal(resp, &issueCert); err != nil {
-		return issueCert, err
-	}
-
-	if len(issueCert.ErrorMsg) != 0 {
-		return issueCert, fmt.Errorf("error reissue certificate, error: %s", fmt.Sprintf("%s. %s",
-			issueCert.ErrorMsg[0].Code, issueCert.ErrorMsg[0].Message))
-	}
-
-	return issueCert, nil
-}
-
-func (r *CertificateResource) renewCertificate(data CertificateResourceModel, orderId int, csr string, orderValidDays int) (renewCert IssueCertRespBody, err error) {
-	dnsName := []string{}
-	data.Sans.ElementsAs(context.Background(), &dnsName, false)
-
-	product, err := r.getProductInfo(data.ProductName.ValueString())
-	if err != nil {
-		return renewCert, err
-	}
-
-	payload := OrderPayload{
-		Certificate: CertificatePayload{
-			CommonName:    data.CommonName.ValueString(),
-			DNSNames:      dnsName,
-			CSR:           csr,
-			SignatureHash: SIGNATURE_HASH,
-			CACertID:      product.NameID,
-		},
-		Organization: Organization{
-			ID: int(data.OrganizationID.ValueInt32()),
-		},
-		OrderValidity: OrderValidityPayload{
-			Days: orderValidDays,
-		},
-		RenewalOfOrderID: orderId,
-		PaymentMethod:    PAYMENT_METHOD,
-		DcvMethod:        DCV_METHOD,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return renewCert, err
-	}
-
-	// Renew cert use the same API ENDPOINT with issue, payload's value will
-	// determine the action is renew or issue. ("RenewalOfOrderId")
-	resp, err := r.client.IssueCert(jsonPayload, product.NameID)
-	if err != nil {
-		return renewCert, err
-	}
-
-	if err = json.Unmarshal(resp, &renewCert); err != nil {
-		return renewCert, err
-	}
-
-	if len(renewCert.ErrorMsg) != 0 {
-		return renewCert, fmt.Errorf("error reissue certificate, error: %s", fmt.Sprintf("%s. %s",
-			renewCert.ErrorMsg[0].Code, renewCert.ErrorMsg[0].Message))
-	}
-
-	return renewCert, nil
-}
-
-func (r *CertificateResource) revokeCertificate(certID int) error {
-	payloadJson := []byte(`{
-		"skip_approval": true
-	}`)
-
-	resp, err := r.client.RevokeCert(certID, payloadJson)
-	if err != nil {
-		return err
-	}
-
-	// resp length == 0, mean revoke certificate successfully
-	if len(resp) != 0 {
-		var errMsgList ErrorMsgList
-		if err := json.Unmarshal(resp, &errMsgList); err != nil {
-			return err
-		}
-
-		if len(errMsgList.ErrorMsg) != 0 {
-			return fmt.Errorf(errMsgList.ErrorMsg[0].Message)
-		}
-	}
-
-	return nil
-}
-
-func (r *CertificateResource) checkDuplicateCertPlacement(commonName string) error {
-	// Check if the common name existed by manual creation
-	orders, err := r.getIssuedOrders(commonName)
-	if err != nil {
-		return fmt.Errorf("getOrder error, %v", err)
-	}
-
-	for _, ord := range orders {
-		if ord.Certificate.Status == "issued" || ord.Certificate.Status == "" {
-			return fmt.Errorf("duplication order placement, %s already placed order on Digicert, order id: %d",
-				commonName, ord.ID)
-		}
-	}
-
-	return nil
-}
-
-func (r *CertificateResource) cancelOrderRequest(orderID int) error {
-	// Cancel the order request
-	payloadJson := []byte(`{
-			"status": "canceled",
-			"note": "Fail validate domain."
-		}`)
-
-	ordStatusResp, err := r.client.UpdateOrderStatus(orderID, payloadJson)
-	if err != nil {
-		return err
-	}
-	// Success will not return any response
-	if len(ordStatusResp) != 0 {
-		return err
-	}
-
-	return nil
-}
-
-func (r *CertificateResource) getIssuedOrders(filterCommonName string) (orders []OrderRespBody, err error) {
-	resp, err := r.client.GetOrders(filterCommonName)
-	if err != nil {
-		return orders, err
-	}
-
-	var orderList OrderListRespBody
-	if err := json.Unmarshal(resp, &orderList); err != nil {
-		return orders, err
-	}
-
-	// Check if any error msg return from API
-	for _, errormsg := range orderList.ErrorMsg {
-		return orders, errors.New(errormsg.Message)
-	}
-
-	// GetOrderInfo() will only return with the primary certificate,
-	// Therefore, filter the common name that is same as the primary
-	// certificate's domain name.
-	// Can obtain certificate's status only from get order info endpoint
-	for _, ord := range orderList.Orders {
-		resp, err := r.client.GetOrderInfo(ord.ID)
-		if err != nil {
-			return orders, err
-		}
-
-		var order OrderRespBody
-		if err := json.Unmarshal(resp, &order); err != nil {
-			return orders, err
-		}
-
-		if order.IsRenewed {
-			continue
-		}
-
-		if filterCommonName == "" {
-			orders = append(orders, order)
-		} else {
-			// If the certificate hasn't been revoked/reissued, API will not return the certificate's status.
-			// Cert Status: issued == "", reissued == "issued", revoked == "revoked"
-			if order.Certificate.CommonName == filterCommonName {
-				orders = append(orders, order)
-			}
-		}
-	}
-
-	if len(orders) != 0 {
-		return orders, nil
-	}
-
-	return orders, nil
-}
-
-func (r *CertificateResource) getOrderList() (orders OrderListRespBody, err error) {
-	resp, err := r.client.GetOrders("")
-	if err != nil {
-		return orders, err
-	}
-
-	if err := json.Unmarshal(resp, &orders); err != nil {
-		return orders, err
-	}
-
-	// Check if any error msg return from API
-	for _, errormsg := range orders.ErrorMsg {
-		return orders, errors.New(errormsg.Message)
-	}
-
-	return orders, nil
-}
-
-func (r *CertificateResource) getOrderInfo(orderId int) (order OrderRespBody, err error) {
-	resp, err := r.client.GetOrderInfo(orderId)
-	if err != nil {
-		return order, err
-	}
-
-	if err := json.Unmarshal(resp, &order); err != nil {
-		return order, err
-	}
-
-	return order, nil
-}
-
-func (r *CertificateResource) getProductInfo(productName string) (product Product, err error) {
-	resp, err := r.client.GetProductList()
-	if err != nil {
-		return product, err
-	}
-
-	var productList ProductListRespBody
-	if err := json.Unmarshal(resp, &productList); err != nil {
-		return product, err
-	}
-
-	for _, product := range productList.Products {
-		if strings.EqualFold(product.Name, productName) {
-			return product, nil
-		}
-
-	}
-
-	return product, fmt.Errorf("API Key Name is not found in Digicert System. " +
-		"Please double-check that the API key name exists in the Digicert system")
-}
-
-func (r *CertificateResource) getIntermediateList() (intermediateList IntermediateListRespBody, err error) {
-	resp, err := r.client.GetIntermediateList()
-	if err != nil {
-		return intermediateList, err
-	}
-
-	if err := json.Unmarshal(resp, &intermediateList); err != nil {
-		return intermediateList, err
-	}
-
-	return intermediateList, nil
-}
-
-func (r *CertificateResource) getCertificateChain(certID int) (certificateChains []CertificateChain, err error) {
-	resp, err := r.client.GetCertificateChain(certID)
-	if err != nil {
-		return certificateChains, err
-	}
-
-	var certificateChainList CertificateChainList
-	if err := json.Unmarshal(resp, &certificateChainList); err != nil {
-		return certificateChains, err
-	}
-
-	return certificateChainList.CertificateChain, nil
-}
-
-func (r *CertificateResource) getAllDomains() (domains []Domain, err error) {
-	resp, err := r.client.GetDomainsList()
-	if err != nil {
-		return domains, err
-	}
-	var domainList DomainListRespBody
-	if err := json.Unmarshal(resp, &domainList); err != nil {
-		return domains, err
-	}
-
-	if len(domainList.Domains) == 0 {
-		return domains, fmt.Errorf("digicert's domain list is empty")
-	}
-
-	return domainList.Domains, nil
-}
-
-func (r *CertificateResource) retrieveReissuableOrd(minOrderRemainingDays int) (order OrderRespBody, isOrdReissuable bool, err error) {
-	orders, err := r.getIssuedOrders("")
-	if err != nil {
-		return order, false, err
-	}
-
-	if len(orders) == 0 {
-		return order, false, nil
-	}
-
-	for _, ord := range orders {
-		orderValidTillDate, err := time.Parse("2006-01-02", ord.OrderValidTill)
-		if err != nil {
-			return order, false, fmt.Errorf("time Parse Error %s", err.Error())
-		}
-		orderEndDate := orderValidTillDate.AddDate(0, 0, 1)
-		orderExpiredDaysRemaining := int(time.Until(orderEndDate).Hours() / 24)
-
-		if ord.Certificate.Status == "revoked" && orderExpiredDaysRemaining > minOrderRemainingDays {
-			// Check if the order id is grab by others threat (tf's concurrent)
-			if isAbleToUseOrderId(ord.ID) {
-				return ord, true, nil
-			}
-		}
-	}
-
-	return order, false, nil
-}
-
-func (r *CertificateResource) generateCSR(orgID int, commonName string, sans []string) (csr string, privateKeyPem string, err error) {
-	body, err := r.client.GetOrgInfoByID(orgID)
-	if err != nil {
-		return "", "", err
-	}
-
-	var org Organization
-	if err := json.Unmarshal(body, &org); err != nil {
-		return "", "", err
-	}
-
+func generateCSR(commonName string, sans []string) (csr string, privateKeyPem string, err error) {
 	// Generate Private key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -1320,7 +774,91 @@ func (r *CertificateResource) generateCSR(orgID int, commonName string, sans []s
 	return string(csrPEM), privateKeyString, nil
 }
 
-func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[string]basetypes.StringValue, order IssueCertRespBody) error {
+func (r *CertificateResource) issueCertificate(data CertificateResourceModel, csr string) (issueCert digicertapi.IssueCertRespBody, err error) {
+	dnsName := []string{}
+	data.Sans.ElementsAs(context.Background(), &dnsName, false)
+	product, err := r.getProductInfo(data.ProductName.ValueString())
+	if err != nil {
+		return issueCert, err
+	}
+
+	orderPayload := digicertapi.OrderPayload{
+		Certificate: digicertapi.CertificatePayload{
+			CommonName:    data.CommonName.ValueString(),
+			DNSNames:      dnsName,
+			CSR:           csr,
+			SignatureHash: SIGNATURE_HASH,
+			CACertID:      product.NameID,
+		},
+		Organization: digicertapi.Organization{
+			ID: int(data.OrganizationID.ValueInt32()),
+		},
+		OrderValidity: digicertapi.OrderValidityPayload{
+			Days: int(data.OrderValidityDays.ValueInt32()),
+		},
+		PaymentMethod: PAYMENT_METHOD,
+		DcvMethod:     DCV_METHOD,
+	}
+
+	return r.client.IssueCert(orderPayload)
+}
+
+func (r *CertificateResource) reissueCertificate(data CertificateResourceModel, orderID int, csr string) (issueCert digicertapi.IssueCertRespBody, err error) {
+	dnsName := []string{}
+	data.Sans.ElementsAs(context.Background(), &dnsName, false)
+	product, err := r.getProductInfo(data.ProductName.ValueString())
+	if err != nil {
+		return issueCert, err
+	}
+
+	orderPayload := digicertapi.OrderPayload{
+		Certificate: digicertapi.CertificatePayload{
+			CommonName:    data.CommonName.ValueString(),
+			DNSNames:      dnsName,
+			CSR:           csr,
+			SignatureHash: SIGNATURE_HASH,
+			CACertID:      product.NameID,
+		},
+		DcvMethod: DCV_METHOD,
+	}
+
+	return r.client.ReissueCert(orderPayload, orderID)
+}
+
+func (r *CertificateResource) renewCertificate(data CertificateResourceModel, orderId int, orderValidDays int, csr string) (renewCert digicertapi.IssueCertRespBody, err error) {
+	dnsName := []string{}
+	data.Sans.ElementsAs(context.Background(), &dnsName, false)
+
+	product, err := r.getProductInfo(data.ProductName.ValueString())
+	if err != nil {
+		return renewCert, err
+	}
+
+	orderPayload := digicertapi.OrderPayload{
+		Certificate: digicertapi.CertificatePayload{
+			CommonName:    data.CommonName.ValueString(),
+			DNSNames:      dnsName,
+			CSR:           csr,
+			SignatureHash: SIGNATURE_HASH,
+			CACertID:      product.NameID,
+		},
+		Organization: digicertapi.Organization{
+			ID: int(data.OrganizationID.ValueInt32()),
+		},
+		OrderValidity: digicertapi.OrderValidityPayload{
+			Days: orderValidDays,
+		},
+		RenewalOfOrderID: orderId,
+		PaymentMethod:    PAYMENT_METHOD,
+		DcvMethod:        DCV_METHOD,
+	}
+
+	// Renew cert use the same API ENDPOINT with issue, payload's value will
+	// determine the action is renew or issue. ("RenewalOfOrderId")
+	return r.client.IssueCert(orderPayload)
+}
+
+func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[string]basetypes.StringValue, order digicertapi.IssueCertRespBody) error {
 	// Reissue action will will not return domains object from response, and
 	// if the domain is valid to use, "DcvRandomValue" will not be returned.
 	if len(order.Domains) == 0 && order.DcvRandomValue != "" {
@@ -1330,23 +868,18 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 			return err
 		}
 
-		order.Domains = append(order.Domains, DomainRespBody{
+		order.Domains = append(order.Domains, digicertapi.DomainRespBody{
 			ID: domainID,
 		})
 	}
 
 	for _, domain := range order.Domains {
-		domainResp, err := r.client.GetDomainInfo(domain.ID)
+		foundDomain, err := r.client.GetDomainInfo(domain.ID)
 		if err != nil {
 			return err
 		}
 
-		var domainRespBody Domain
-		if err := json.Unmarshal(domainResp, &domainRespBody); err != nil {
-			return err
-		}
-
-		if domainRespBody.IsPendingValidation {
+		if foundDomain.IsPendingValidation {
 			// Add txt record to DNS provider.
 			var accessKey string
 			var secretAccessKey string
@@ -1367,15 +900,15 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				hostedZoneIds, err := route53Client.GetHostedZoneByDomainName(domainRespBody.Name)
+				hostedZoneIds, err := route53Client.GetHostedZoneByDomainName(foundDomain.Name)
 				if err != nil {
 					return err
 				}
 
-				if err := route53Client.ModifyAWSRoute53Record(UPSERT_RECORD, domainRespBody.Name, domainRespBody.DcvToken.Token, hostedZoneIds); err != nil {
+				if err := route53Client.ModifyAWSRoute53Record(UPSERT_RECORD, foundDomain.Name, foundDomain.DcvToken.Token, hostedZoneIds); err != nil {
 					return err
 				}
-				defer route53Client.ModifyAWSRoute53Record(DELETE_RECORD, domainRespBody.Name, domainRespBody.DcvToken.Token, hostedZoneIds)
+				defer route53Client.ModifyAWSRoute53Record(DELETE_RECORD, foundDomain.Name, foundDomain.DcvToken.Token, hostedZoneIds)
 			case "alidns":
 				for k, v := range dnsCreds {
 					if k == ALICLOUD_ACCESS_KEY {
@@ -1392,7 +925,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				recordID, err := alidnsClient.CreateAliDNSRecord(domainRespBody.Name, domainRespBody.DcvToken.Token)
+				recordID, err := alidnsClient.CreateAliDNSRecord(foundDomain.Name, foundDomain.DcvToken.Token)
 				if err != nil {
 					return err
 				}
@@ -1410,35 +943,26 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				dnsRecordID, err := cloudflareClient.UpdateRecord(domainRespBody.Name, domainRespBody.DcvToken.Token)
+				dnsRecordID, err := cloudflareClient.UpdateRecord(foundDomain.Name, foundDomain.DcvToken.Token)
 				if err != nil {
 					return err
 				}
-				defer cloudflareClient.DeleteDnsRecord(dnsRecordID, domainRespBody.Name)
+				defer cloudflareClient.DeleteDnsRecord(dnsRecordID, foundDomain.Name)
 			default:
 				return fmt.Errorf("invalid DNS Provider")
 			}
 
 			// Trigger validate domain action in Digicert
 			checkDomain := func() error {
-				activateDomainresp, err := r.client.CheckDomainDCV(domainRespBody.ID)
+				err := r.client.CheckDomainDCV(foundDomain.ID)
 				if err != nil {
-					return backoff.Permanent(err)
-				}
-
-				var errMsgList ErrorMsgList
-				if err := json.Unmarshal(activateDomainresp, &errMsgList); err != nil {
-					return backoff.Permanent(err)
-				}
-
-				if len(errMsgList.ErrorMsg) != 0 {
-					// DNS LOOKUP
-					if errMsgList.ErrorMsg[0].Code == "invalid_dns_txt" {
-						tflog.Debug(context.Background(), fmt.Sprintf("Digicert validate domain Error: %s", errMsgList.ErrorMsg[0].Message))
-						return fmt.Errorf("error digicert validate domain, error: %s", errMsgList.ErrorMsg[0].Message)
+					if strings.Contains(err.Error(), "invalid_dns_txt") {
+						tflog.Debug(context.Background(), fmt.Sprintf("Digicert validate domain Error: %s", err.Error()))
+						return fmt.Errorf("error digicert validate domain, error: %s", err.Error())
 					}
 					return backoff.Permanent(err)
 				}
+
 				return nil
 			}
 
@@ -1453,23 +977,18 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 
 func (r *CertificateResource) getDomainIDByDCVRandomValue(dcvRandomValue string) (domainID int, err error) {
 	// Obtain the domain id that need to perform dns challenge
-	domains, err := r.getAllDomains()
+	domains, err := r.client.GetDomainsList()
 	if err != nil {
 		return -1, err
 	}
 
 	for _, domain := range domains {
-		resp, err := r.client.GetDomainInfo(domain.ID)
+		domain, err := r.client.GetDomainInfo(domain.ID)
 		if err != nil {
 			return -1, err
 		}
 
-		var domainRespBody Domain
-		if err := json.Unmarshal(resp, &domainRespBody); err != nil {
-			return -1, err
-		}
-
-		if domainRespBody.DcvToken.Token == dcvRandomValue {
+		if domain.DcvToken.Token == dcvRandomValue {
 			return domain.ID, nil
 		}
 	}
@@ -1477,8 +996,109 @@ func (r *CertificateResource) getDomainIDByDCVRandomValue(dcvRandomValue string)
 	return -1, nil
 }
 
-func (r *CertificateResource) distinguishCertType(certificateChain []CertificateChain, commonName string) (certPem string, issuerPem string, rootPem string, err error) {
-	intermediateList, err := r.getIntermediateList()
+func (r *CertificateResource) getIssuedOrders(filterCommonName string) (orders []digicertapi.OrderRespBody, err error) {
+	orderList, err := r.client.GetOrders(filterCommonName)
+	if err != nil {
+		return orders, err
+	}
+
+	// GetOrderInfo() will only return with the primary certificate,
+	// Therefore, filter the common name that is same as the primary
+	// certificate's domain name.
+	// Can obtain certificate's status only from get order info endpoint
+	for _, ord := range orderList.Orders {
+		order, err := r.client.GetOrderInfo(ord.ID)
+		if err != nil {
+			return orders, err
+		}
+
+		if order.IsRenewed {
+			continue
+		}
+
+		if filterCommonName == "" {
+			orders = append(orders, order)
+		} else {
+			// If the certificate hasn't been revoked/reissued, API will not return the certificate's status.
+			// Cert Status: issued == "", reissued == "issued", revoked == "revoked"
+			if order.Certificate.CommonName == filterCommonName {
+				orders = append(orders, order)
+			}
+		}
+	}
+
+	if len(orders) != 0 {
+		return orders, nil
+	}
+
+	return orders, nil
+}
+
+func (r *CertificateResource) getProductInfo(productName string) (product digicertapi.Product, err error) {
+	productList, err := r.client.GetProductList()
+	if err != nil {
+		return product, err
+	}
+
+	for _, product := range productList.Products {
+		if strings.EqualFold(product.Name, productName) {
+			return product, nil
+		}
+
+	}
+
+	return product, fmt.Errorf("API Key Name is not found in Digicert System. " +
+		"Please double-check that the API key name exists in the Digicert system")
+}
+
+func (r *CertificateResource) retrieveReissuableOrd(minOrderRemainingDays int) (order digicertapi.OrderRespBody, isOrdReissuable bool, err error) {
+	orders, err := r.getIssuedOrders("")
+	if err != nil {
+		return order, false, err
+	}
+
+	if len(orders) == 0 {
+		return order, false, nil
+	}
+
+	for _, ord := range orders {
+		orderValidTillDate, err := time.Parse("2006-01-02", ord.OrderValidTill)
+		if err != nil {
+			return order, false, fmt.Errorf("time Parse Error %s", err.Error())
+		}
+		orderEndDate := orderValidTillDate.AddDate(0, 0, 1)
+		orderExpiredDaysRemaining := int(time.Until(orderEndDate).Hours() / 24)
+
+		if ord.Certificate.Status == "revoked" && orderExpiredDaysRemaining > minOrderRemainingDays {
+			// Check if the order id is grab by others threat (tf's concurrent)
+			if isAbleToUseOrderId(ord.ID) {
+				return ord, true, nil
+			}
+		}
+	}
+
+	return order, false, nil
+}
+
+func (r *CertificateResource) checkDuplicateCertPlacement(commonName string) error {
+	// Check if the common name existed by manual creation
+	orders, err := r.getIssuedOrders(commonName)
+	if err != nil {
+		return fmt.Errorf("getOrder error, %v", err)
+	}
+
+	for _, ord := range orders {
+		if ord.Certificate.Status == "issued" || ord.Certificate.Status == "" {
+			return fmt.Errorf("duplication order placement, %s already placed order on Digicert, order id: %d",
+				commonName, ord.ID)
+		}
+	}
+
+	return nil
+}
+
+func (r *CertificateResource) distinguishCertType(certificateChain []digicertapi.CertificateChain, commonName string) (certPem string, issuerPem string, rootPem string, err error) {
+	intermediateList, err := r.client.GetIntermediateList()
 	if err != nil {
 		return "", "", "", err
 	}

@@ -3,12 +3,10 @@
 package digicert
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -36,20 +34,12 @@ func getDigicertClient() *CertificateResource {
 
 // Acceptance Test use only
 func (r *CertificateResource) revokedAllOrders() error {
-	resp, err := r.client.GetOrdersList()
+	orders, err := r.client.GetOrdersList()
 	if err != nil {
 		return err
 	}
-	var orders OrderListRespBody
-	if err := json.Unmarshal(resp, &orders); err != nil {
-		return err
-	}
 
-	for _, errormsg := range orders.ErrorMsg {
-		log.Println(strings.Contains(errormsg.Code, "Missing authentication"))
-	}
 	var order_ids []int
-
 	for _, order := range orders.Orders {
 		order_ids = append(order_ids, order.ID)
 	}
@@ -61,12 +51,11 @@ func (r *CertificateResource) revokedAllOrders() error {
 	}
 
 	for _, o_id := range order_ids {
-
-		jsonData := []byte(`{
-			"skip_approval": true
-			}`)
-		r.client.RevokeAllCert(o_id, jsonData)
+		if err := r.client.RevokeAllCert(o_id); err != nil {
+			panic(err)
+		}
 	}
+
 	return nil
 }
 
@@ -277,7 +266,7 @@ func TestDigicert_StateImport(t *testing.T) {
 func testDigicertCertificateChecking(action string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		r := getDigicertClient()
-		orders, err := r.getOrderList()
+		orders, err := r.client.GetOrders("")
 		if err != nil {
 			return err
 		}
@@ -289,7 +278,7 @@ func testDigicertCertificateChecking(action string) resource.TestCheckFunc {
 
 		// will only have one renewed order and issued order
 		for _, ord := range orders.Orders {
-			order, err := r.getOrderInfo(ord.ID)
+			order, err := r.client.GetOrderInfo(ord.ID)
 			if err != nil {
 				return err
 			}
