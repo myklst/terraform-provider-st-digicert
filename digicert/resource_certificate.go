@@ -32,6 +32,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/myklst/terraform-provider-st-digicert/digicert/backoff_retry"
 	aliclouddns "github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/alicloud/dns"
 	"github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/aws/route53"
 	cloudflaredns "github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/cloudflare/dns"
@@ -967,7 +968,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 			}
 
 			// DNS Cached, Retry for 6 minutes
-			if err = retryOperator(checkDomain, 6*time.Minute); err != nil {
+			if err = backoff_retry.RetryOperator(checkDomain, 6*time.Minute); err != nil {
 				return err
 			}
 		}
@@ -1138,10 +1139,4 @@ func isAbleToUseOrderId(orderID int) bool {
 
 	used_order_ids = append(used_order_ids, orderID)
 	return true
-}
-
-func retryOperator(function func() error, DefaultMaxElapsedTime time.Duration) error {
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = DefaultMaxElapsedTime
-	return backoff.Retry(function, reconnectBackoff)
 }

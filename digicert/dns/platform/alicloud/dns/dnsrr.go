@@ -11,12 +11,17 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/alicloud"
+	"github.com/myklst/terraform-provider-st-digicert/digicert/backoff_retry"
+	alicloud "github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/alicloud"
 )
 
 type Alidns struct {
 	Client *alidns.Client
 }
+
+const (
+	MAX_ELAPSED_TIME = 10 * time.Minute
+)
 
 func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
 	describeDomainRecordsRequest := &alidns.DescribeDomainRecordsRequest{
@@ -78,9 +83,7 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-	if err := backoff.Retry(deleteDnsRecord, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(deleteDnsRecord, MAX_ELAPSED_TIME); err != nil {
 		return fmt.Errorf("Alidns delete dns record. Failed to Delete dns record: %v", err)
 	}
 	return nil
@@ -118,11 +121,10 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 			}
 			return nil
 		}
-		reconnectBackoff := backoff.NewExponentialBackOff()
-		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-		if err := backoff.Retry(addRecord, reconnectBackoff); err != nil {
+		if err := backoff_retry.RetryOperator(addRecord, MAX_ELAPSED_TIME); err != nil {
 			return "", fmt.Errorf("Alidns create dns record. Failed to create verification TXT record: %v", err)
 		}
+
 		return recordId, nil
 	}
 
@@ -137,9 +139,7 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-	if err := backoff.Retry(updateRecord, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(updateRecord, MAX_ELAPSED_TIME); err != nil {
 		return "", fmt.Errorf("Alidns update dns record. Failed to Update verification TXT record: %v", err)
 	}
 

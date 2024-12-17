@@ -12,14 +12,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/myklst/terraform-provider-st-digicert/digicert/backoff_retry"
 	awsErrCommon "github.com/myklst/terraform-provider-st-digicert/digicert/dns/platform/aws"
 	"github.com/sirupsen/logrus"
 )
 
 const (
-	CREATE_RECORD = "CREATE"
-	DELETE_RECORD = "DELETE"
-	UPSERT_RECORD = "UPSERT"
+	CREATE_RECORD    = "CREATE"
+	DELETE_RECORD    = "DELETE"
+	UPSERT_RECORD    = "UPSERT"
+	MAX_ELAPSED_TIME = 10 * time.Minute
 )
 
 type Rout53 struct {
@@ -52,9 +54,7 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 			}
 			return nil
 		}
-		reconnectBackoff := backoff.NewExponentialBackOff()
-		reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-		if err := backoff.Retry(listHostedZonesByName, reconnectBackoff); err != nil {
+		if err := backoff_retry.RetryOperator(listHostedZonesByName, MAX_ELAPSED_TIME); err != nil {
 			return hostedZoneIds, fmt.Errorf("ListHostedZonesByName() Failed to list hosted zone by name: %v", err)
 		}
 
@@ -115,9 +115,7 @@ func (r *Rout53) changeResourceRecordSets(action, domain, verifyTxtContent, host
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = 10 * time.Minute
-	if err := backoff.Retry(changeRecord, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(changeRecord, MAX_ELAPSED_TIME); err != nil {
 		return resp, fmt.Errorf("modifyRoute53Record() Failed to create verification TXT record: %v", err)
 	}
 

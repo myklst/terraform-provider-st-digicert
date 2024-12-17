@@ -9,6 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/myklst/terraform-provider-st-digicert/digicert/backoff_retry"
 )
 
 const (
@@ -37,9 +38,7 @@ func (c *Cloudflare) createDNSRecord(domainName, recordName, content, rrType str
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
-	if err := backoff.Retry(createDNSRecord, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(createDNSRecord, MAX_ELAPSED_TIME); err != nil {
 		return "", fmt.Errorf("createDNSRecord() Failed to create dns records on cloudflare: %v", err)
 	}
 
@@ -89,9 +88,7 @@ func (c *Cloudflare) updateDNSRecord(domainName, id, recordName, content, rrType
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
-	if err := backoff.Retry(updateDNSRercords, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(updateDNSRercords, MAX_ELAPSED_TIME); err != nil {
 		return fmt.Errorf("updateDNSRercords() Failed to update dns records on cloudflare: %v", err)
 	}
 	return nil
@@ -109,9 +106,7 @@ func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) (err error) {
 		}
 		return nil
 	}
-	reconnectBackoff := backoff.NewExponentialBackOff()
-	reconnectBackoff.MaxElapsedTime = MAX_ELAPSED_TIME
-	if err := backoff.Retry(deleteDNSRercords, reconnectBackoff); err != nil {
+	if err := backoff_retry.RetryOperator(deleteDNSRercords, MAX_ELAPSED_TIME); err != nil {
 		return fmt.Errorf("DeleteDNSRercords() Failed to delete dns record on cloudflare: %v", err)
 	}
 
