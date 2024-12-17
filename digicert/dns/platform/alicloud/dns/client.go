@@ -23,7 +23,8 @@ func NewClient(accessKey, secretKey string) (dns *Alidns, err error) {
 		AccessKeySecret: tea.String(secretKey),
 	}
 
-	config.Endpoint = tea.String("alidns.cn-hongkong.aliyuncs.com")
+	// alidns dont has general's global endpoint. Specify the endpoint closest to where the program is running.
+	config.Endpoint = tea.String("alidns.ap-southeast-3.aliyuncs.com")
 	client, err := alidns.NewClient(config)
 	return &Alidns{
 		Client: client,
