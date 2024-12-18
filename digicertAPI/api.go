@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
-	"strings"
 )
 
 const (
@@ -76,20 +74,20 @@ func (c *Client) IssueCert(orderPayLoad OrderPayload) (issueCert IssueCertRespBo
 	url := fmt.Sprintf("%s/%s", ORDER_ENDPOINT, orderPayLoad.Certificate.CACertID)
 	jsonPayload, err := json.Marshal(orderPayLoad)
 	if err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	resp, err := c.httpResponse(http.MethodPost, url, jsonPayload)
 	if err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	if err := json.Unmarshal(resp, &issueCert); err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	if len(issueCert.ErrorMsg) != 0 {
-		return issueCert, fmt.Errorf("error issue certificate, error: %s", fmt.Sprintf("%s. %s",
+		return IssueCertRespBody{}, fmt.Errorf("error issue certificate, error: %s", fmt.Sprintf("%s. %s",
 			issueCert.ErrorMsg[0].Code, issueCert.ErrorMsg[0].Message))
 	}
 
@@ -100,20 +98,20 @@ func (c *Client) ReissueCert(orderPayload OrderPayload, orderID int) (issueCert 
 	url := fmt.Sprintf("%s/%d/reissue", ORDER_ENDPOINT, orderID)
 	jsonPayload, err := json.Marshal(orderPayload)
 	if err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	resp, err := c.httpResponse(http.MethodPost, url, jsonPayload)
 	if err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	if err = json.Unmarshal(resp, &issueCert); err != nil {
-		return issueCert, err
+		return IssueCertRespBody{}, err
 	}
 
 	if len(issueCert.ErrorMsg) != 0 {
-		return issueCert, fmt.Errorf("error reissue certificate, error: %s", fmt.Sprintf("%s. %s",
+		return IssueCertRespBody{}, fmt.Errorf("error reissue certificate, error: %s", fmt.Sprintf("%s. %s",
 			issueCert.ErrorMsg[0].Code, issueCert.ErrorMsg[0].Message))
 	}
 
@@ -138,36 +136,16 @@ func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err err
 	url := fmt.Sprintf("%s?filters[status]=issued&sort=-date_created&filters[common_name]=%s", ORDER_ENDPOINT, commonName)
 	resp, err := c.httpResponse(http.MethodGet, url, nil)
 	if err != nil {
-		return orders, err
-	}
-
-	var orderList OrderListRespBody
-	if err := json.Unmarshal(resp, &orderList); err != nil {
-		return orders, err
-	}
-
-	// Check if any error msg return from API
-	for _, errormsg := range orderList.ErrorMsg {
-		return orders, errors.New(errormsg.Message)
-	}
-
-	return orderList, nil
-}
-
-func (c *Client) GetOrdersList() (orders OrderListRespBody, err error) {
-	url := fmt.Sprintf("%s?filters[status]=issued", ORDER_ENDPOINT)
-
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
-	if err != nil {
-		return orders, err
+		return OrderListRespBody{}, err
 	}
 
 	if err := json.Unmarshal(resp, &orders); err != nil {
-		return orders, err
+		return OrderListRespBody{}, err
 	}
 
+	// Check if any error msg return from API
 	for _, errormsg := range orders.ErrorMsg {
-		log.Println(strings.Contains(errormsg.Code, "Missing authentication"))
+		return OrderListRespBody{}, errors.New(errormsg.Message)
 	}
 
 	return orders, nil
@@ -177,11 +155,11 @@ func (c *Client) GetOrderInfo(orderId int) (order OrderRespBody, err error) {
 	url := fmt.Sprintf("%s/%d", ORDER_ENDPOINT, orderId)
 	resp, err := c.httpResponse(http.MethodGet, url, nil)
 	if err != nil {
-		return order, err
+		return OrderRespBody{}, err
 	}
 
 	if err := json.Unmarshal(resp, &order); err != nil {
-		return order, err
+		return OrderRespBody{}, err
 	}
 
 	return order, err
@@ -214,12 +192,12 @@ func (c *Client) GetCertificateChain(certID int) (certificateChains []Certificat
 	url := fmt.Sprintf("%s/%d/chain", CERT_ENDPOINT, certID)
 	resp, err := c.httpResponse(http.MethodGet, url, nil)
 	if err != nil {
-		return certificateChains, err
+		return []CertificateChain{}, err
 	}
 
 	var certificateChainList CertificateChainList
 	if err := json.Unmarshal(resp, &certificateChainList); err != nil {
-		return certificateChains, err
+		return []CertificateChain{}, err
 	}
 
 	return certificateChainList.CertificateChain, nil
@@ -237,11 +215,11 @@ type Intermediates struct {
 func (c *Client) GetIntermediateList() (intermediateList IntermediateListRespBody, err error) {
 	resp, err := c.httpResponse(http.MethodGet, INTERMEDIATE_ENDPOINT, nil)
 	if err != nil {
-		return intermediateList, err
+		return IntermediateListRespBody{}, err
 	}
 
 	if err := json.Unmarshal(resp, &intermediateList); err != nil {
-		return intermediateList, err
+		return IntermediateListRespBody{}, err
 	}
 
 	return intermediateList, nil
@@ -259,11 +237,11 @@ type Product struct {
 func (c *Client) GetProductList() (productList ProductListRespBody, err error) {
 	resp, err := c.httpResponse(http.MethodGet, PRODUCT_ENDPOINT, nil)
 	if err != nil {
-		return productList, err
+		return ProductListRespBody{}, err
 	}
 
 	if err := json.Unmarshal(resp, &productList); err != nil {
-		return productList, err
+		return ProductListRespBody{}, err
 	}
 	return productList, nil
 }
@@ -288,15 +266,15 @@ type DcvToken struct {
 func (c *Client) GetDomainsList() (domains []Domain, err error) {
 	resp, err := c.httpResponse(http.MethodGet, DOMAIN_ENDPOINT, nil)
 	if err != nil {
-		return domains, err
+		return []Domain{}, err
 	}
 	var domainList DomainListRespBody
 	if err := json.Unmarshal(resp, &domainList); err != nil {
-		return domains, err
+		return []Domain{}, err
 	}
 
 	if len(domainList.Domains) == 0 {
-		return domains, fmt.Errorf("digicert's domain list is empty")
+		return []Domain{}, fmt.Errorf("digicert's domain list is empty")
 	}
 
 	return domainList.Domains, nil
@@ -306,11 +284,11 @@ func (c *Client) GetDomainInfo(domainID int) (domain Domain, err error) {
 	url := fmt.Sprintf("%s/%d?include_dcv=true&include_validation=true", DOMAIN_ENDPOINT, domainID)
 	resp, err := c.httpResponse(http.MethodGet, url, nil)
 	if err != nil {
-		return domain, err
+		return Domain{}, err
 	}
 
 	if err := json.Unmarshal(resp, &domain); err != nil {
-		return domain, err
+		return Domain{}, err
 	}
 	return domain, nil
 }

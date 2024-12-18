@@ -902,15 +902,10 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				hostedZoneIds, err := route53Client.GetHostedZoneByDomainName(foundDomain.Name)
-				if err != nil {
+				if err := route53Client.ModifyAWSRoute53Record(UPSERT_RECORD, foundDomain.Name, foundDomain.DcvToken.Token); err != nil {
 					return err
 				}
-
-				if err := route53Client.ModifyAWSRoute53Record(UPSERT_RECORD, foundDomain.Name, foundDomain.DcvToken.Token, hostedZoneIds); err != nil {
-					return err
-				}
-				defer route53Client.ModifyAWSRoute53Record(DELETE_RECORD, foundDomain.Name, foundDomain.DcvToken.Token, hostedZoneIds)
+				defer route53Client.ModifyAWSRoute53Record(DELETE_RECORD, foundDomain.Name, foundDomain.DcvToken.Token)
 			case "alidns":
 				for k, v := range dnsCreds {
 					if k == ALICLOUD_ACCESS_KEY {
@@ -940,16 +935,16 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					}
 				}
 
-				cloudflareClient, err := cloudflaredns.NewClient(token)
+				cfClient, err := cloudflaredns.NewClient(token)
 				if err != nil {
 					return err
 				}
 
-				dnsRecordID, err := cloudflareClient.UpdateRecord(foundDomain.Name, foundDomain.DcvToken.Token)
+				dnsRecordID, err := cfClient.UpdateRecord(foundDomain.Name, foundDomain.DcvToken.Token)
 				if err != nil {
 					return err
 				}
-				defer cloudflareClient.DeleteDnsRecord(dnsRecordID, foundDomain.Name)
+				defer cfClient.DeleteDnsRecord(dnsRecordID, foundDomain.Name)
 			default:
 				return fmt.Errorf("invalid DNS Provider")
 			}

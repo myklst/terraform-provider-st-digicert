@@ -28,7 +28,7 @@ type Rout53 struct {
 	Client *route53.Route53
 }
 
-func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []string, err error) {
+func (r *Rout53) getHostedZoneByDomainName(domain string) (hostedZoneIds []string, err error) {
 	domain = fmt.Sprintf("%s.", domain) // AWS hosted zone format, Ensure the domain name ends with a dot (.)
 
 	req := &route53.ListHostedZonesByNameInput{
@@ -39,9 +39,8 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 	for {
 		var result *route53.ListHostedZonesByNameOutput
 		listHostedZonesByName := func() error {
-			result, err = r.Client.ListHostedZonesByName(req)
-			if err != nil {
-				logrus.Errorf("Failed to list hosted zones by name: %v", err)
+			if result, err = r.Client.ListHostedZonesByName(req); err != nil {
+				logrus.Errorf("AWS route53 Failed to list hosted zones by name: %v", err)
 				if aerr, ok := err.(awserr.Error); ok {
 					errCode := aerr.Code()
 					tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 list hosted zones by name Error: %s", err.Error()))
@@ -55,7 +54,7 @@ func (r *Rout53) GetHostedZoneByDomainName(domain string) (hostedZoneIds []strin
 			return nil
 		}
 		if err := backoff_retry.RetryOperator(listHostedZonesByName, MAX_ELAPSED_TIME); err != nil {
-			return hostedZoneIds, fmt.Errorf("ListHostedZonesByName() Failed to list hosted zone by name: %v", err)
+			return hostedZoneIds, fmt.Errorf("AWS route53 ListHostedZonesByName() Failed to list hosted zone by name: %v", err)
 		}
 
 		for _, zone := range result.HostedZones {
@@ -103,12 +102,12 @@ func (r *Rout53) changeResourceRecordSets(action, domain, verifyTxtContent, host
 
 	changeRecord := func() error {
 		if resp, err = r.Client.ChangeResourceRecordSets(req); err != nil {
-			logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
+			logrus.Errorf("AWS route53 Failed to %s verification records: %v", "UPSERT", err)
 			if aerr, ok := err.(awserr.Error); ok {
 				errCode := aerr.Code()
 				tflog.Debug(context.Background(), fmt.Sprintf("AWS Route53 modify record Error: %s", err.Error()))
 				if awsErrCommon.IsPermanentCommonError(errCode) {
-					return backoff.Permanent(fmt.Errorf("permanent err:\n%w", aerr))
+					return backoff.Permanent(fmt.Errorf("AWS route53 permanent err:\n%w", aerr))
 				}
 				return aerr
 			}
@@ -116,16 +115,21 @@ func (r *Rout53) changeResourceRecordSets(action, domain, verifyTxtContent, host
 		return nil
 	}
 	if err := backoff_retry.RetryOperator(changeRecord, MAX_ELAPSED_TIME); err != nil {
-		return resp, fmt.Errorf("modifyRoute53Record() Failed to create verification TXT record: %v", err)
+		return resp, fmt.Errorf("AWS route53 modifyRoute53Record() Failed to create verification TXT record: %v", err)
 	}
 
 	return resp, nil
 }
 
-func (r *Rout53) ModifyAWSRoute53Record(action, commonName, token string, hostedZoneIds []string) (err error) {
+func (r *Rout53) ModifyAWSRoute53Record(action, commonName, token string) (err error) {
+	hostedZoneIds, err := r.getHostedZoneByDomainName(commonName)
+	if err != nil {
+		return err
+	}
+
 	for _, hostedZoneId := range hostedZoneIds {
 		if _, err := r.changeResourceRecordSets(action, commonName, token, hostedZoneId); err != nil {
-			logrus.Errorf("Failed to %s verification records: %v", "UPSERT", err)
+			logrus.Errorf("AWS route53 Failed to %s verification records: %v", "UPSERT", err)
 			return err
 		}
 	}

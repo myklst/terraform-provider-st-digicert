@@ -23,7 +23,7 @@ const (
 	MAX_ELAPSED_TIME = 10 * time.Minute
 )
 
-func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
+func (a *Alidns) getAllDnsRecords(domain string) (domainRecords []*alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord, err error) {
 	describeDomainRecordsRequest := &alidns.DescribeDomainRecordsRequest{
 		DomainName: tea.String(domain),
 		PageSize:   tea.Int64(500), // AliCloud maximum allow 500 records. It's
@@ -31,15 +31,25 @@ func (a *Alidns) GetAllDnsRecords(domain string) (domainRecords []*alidns.Descri
 		// process first.
 	}
 
-	response, err := a.Client.DescribeDomainRecords(describeDomainRecordsRequest)
-	if err != nil {
-		return nil, err
+	var response *alidns.DescribeDomainRecordsResponse
+	getRecord := func() error {
+		if response, err = a.Client.DescribeDomainRecords(describeDomainRecordsRequest); err != nil {
+			tflog.Debug(context.Background(), fmt.Sprintf("Alidns describe domain record Error: %s", err.Error()))
+			if alicloud.IsPermanentCommonError(err.Error()) {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+		return nil
+	}
+	if err := backoff_retry.RetryOperator(getRecord, MAX_ELAPSED_TIME); err != nil {
+		return nil, fmt.Errorf("Alidns describe domain record. Failed to Get record: %v", err)
 	}
 
 	return response.Body.DomainRecords.Record, err
 }
 
-func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (recordID string, err error) {
+func (a *Alidns) addDnsRecord(domain, rrType, rr, value string) (recordID string, err error) {
 	addDomainRecordRequest := &alidns.AddDomainRecordRequest{
 		DomainName: tea.String(domain),
 		RR:         tea.String(rr),
@@ -47,15 +57,25 @@ func (a *Alidns) AddDnsRecord(domain, rrType, rr, value string) (recordID string
 		Value:      tea.String(value),
 	}
 
-	response, err := a.Client.AddDomainRecord(addDomainRecordRequest)
-	if err != nil {
-		return "", err
+	var response *alidns.AddDomainRecordResponse
+	addRecord := func() error {
+		if response, err = a.Client.AddDomainRecord(addDomainRecordRequest); err != nil {
+			tflog.Debug(context.Background(), fmt.Sprintf("Alidns add record Error: %s", err.Error()))
+			if alicloud.IsPermanentCommonError(err.Error()) {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+		return nil
+	}
+	if err := backoff_retry.RetryOperator(addRecord, MAX_ELAPSED_TIME); err != nil {
+		return "", fmt.Errorf("Alidns add dns record. Failed to add verification TXT record: %v", err)
 	}
 
 	return *response.Body.RecordId, nil
 }
 
-func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) (err error) {
+func (a *Alidns) updateDnsRecord(id, rrType, subdomain, value string) (err error) {
 	updateDomainRecordRequest := &alidns.UpdateDomainRecordRequest{
 		RecordId: tea.String(id),
 		RR:       tea.String(subdomain),
@@ -63,8 +83,18 @@ func (a *Alidns) UpdateDnsRecord(id, rrType, subdomain, value string) (err error
 		Value:    tea.String(value),
 	}
 
-	if _, err := a.Client.UpdateDomainRecord(updateDomainRecordRequest); err != nil {
-		return err
+	updateRecord := func() error {
+		if _, err := a.Client.UpdateDomainRecord(updateDomainRecordRequest); err != nil {
+			tflog.Debug(context.Background(), fmt.Sprintf("Alidns update record Error: %s", err.Error()))
+			if alicloud.IsPermanentCommonError(err.Error()) {
+				return backoff.Permanent(err)
+			}
+			return err
+		}
+		return nil
+	}
+	if err := backoff_retry.RetryOperator(updateRecord, MAX_ELAPSED_TIME); err != nil {
+		return fmt.Errorf("Alidns update dns record. Failed to Update verification TXT record: %v", err)
 	}
 
 	return nil
@@ -76,6 +106,7 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	}
 	deleteDnsRecord := func() error {
 		if _, err := a.Client.DeleteDomainRecord(deleteDomainRecordRequest); err != nil {
+			tflog.Debug(context.Background(), fmt.Sprintf("Alidns delete record Error: %s", err.Error()))
 			if alicloud.IsPermanentCommonError(err.Error()) {
 				return backoff.Permanent(err)
 			}
@@ -90,13 +121,13 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 }
 
 func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId string, err error) {
-	dnsRecords, err := a.GetAllDnsRecords(commonName)
+	dnsRecords, err := a.getAllDnsRecords(commonName)
 	if err != nil {
 		return "", err
 	}
 
 	if len(dnsRecords) == 0 {
-		return "", fmt.Errorf("domain name not found in Alidns")
+		return "", fmt.Errorf("Alidns domain name not found")
 	}
 
 	var foundDnsRecord *alidns.DescribeDomainRecordsResponseBodyDomainRecordsRecord
@@ -110,37 +141,17 @@ func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId s
 	// Record not found
 	if foundDnsRecord == nil {
 		// Create a TXT record
-		addRecord := func() error {
-			recordId, err = a.AddDnsRecord(commonName, "TXT", "@", token)
-			if err != nil {
-				tflog.Debug(context.Background(), fmt.Sprintf("Alidns Add record Error: %s", err.Error()))
-				if alicloud.IsPermanentCommonError(err.Error()) {
-					return backoff.Permanent(err)
-				}
-				return err
-			}
-			return nil
-		}
-		if err := backoff_retry.RetryOperator(addRecord, MAX_ELAPSED_TIME); err != nil {
-			return "", fmt.Errorf("Alidns create dns record. Failed to create verification TXT record: %v", err)
+		recordId, err = a.addDnsRecord(commonName, "TXT", "@", token)
+		if err != nil {
+			return "", err
 		}
 
 		return recordId, nil
 	}
 
 	// Update the existed TXT record
-	updateRecord := func() error {
-		if err := a.UpdateDnsRecord(*foundDnsRecord.RecordId, *foundDnsRecord.Type, *foundDnsRecord.RR, token); err != nil {
-			tflog.Debug(context.Background(), fmt.Sprintf("Alidns update record Error: %s", err.Error()))
-			if alicloud.IsPermanentCommonError(err.Error()) {
-				return backoff.Permanent(err)
-			}
-			return err
-		}
-		return nil
-	}
-	if err := backoff_retry.RetryOperator(updateRecord, MAX_ELAPSED_TIME); err != nil {
-		return "", fmt.Errorf("Alidns update dns record. Failed to Update verification TXT record: %v", err)
+	if err := a.updateDnsRecord(*foundDnsRecord.RecordId, *foundDnsRecord.Type, *foundDnsRecord.RR, token); err != nil {
+		return "", err
 	}
 
 	return *foundDnsRecord.RecordId, nil

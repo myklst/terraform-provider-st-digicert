@@ -34,7 +34,7 @@ func getDigicertClient() *CertificateResource {
 
 // Acceptance Test use only
 func (r *CertificateResource) revokedAllOrders() error {
-	orders, err := r.client.GetOrdersList()
+	orders, err := r.client.GetOrders("")
 	if err != nil {
 		return err
 	}
