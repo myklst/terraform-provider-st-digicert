@@ -728,6 +728,21 @@ func (r *CertificateResource) ModifyPlan(ctx context.Context, req resource.Modif
 	}
 }
 
+func isAbleToUseOrderId(orderID int) bool {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// check if the order id is grab by others threat (tf's concurrent)
+	for _, order_id := range used_order_ids {
+		if order_id == orderID {
+			return false
+		}
+	}
+
+	used_order_ids = append(used_order_ids, orderID)
+	return true
+}
+
 func certificateHasExpired(minDaysRemaining int, certValidTill string) (hasExpired bool, err error) {
 	certValidTillDate, err := time.Parse("2006-01-02", certValidTill)
 	if err != nil {
@@ -774,6 +789,134 @@ func generateCSR(commonName string, sans []string) (csr string, privateKeyPem st
 	csrPEM := pem.EncodeToMemory(csrBlock)
 
 	return string(csrPEM), privateKeyString, nil
+}
+
+func (r *CertificateResource) getIssuedOrders(filterCommonName string) (orders []digicertapi.OrderRespBody, err error) {
+	orderList, err := r.client.GetOrders(filterCommonName)
+	if err != nil {
+		return orders, err
+	}
+
+	// GetOrderInfo() will only return with the primary certificate,
+	// Therefore, filter the common name that is same as the primary
+	// certificate's domain name.
+	// Can obtain certificate's status only from get order info endpoint
+	for _, ord := range orderList.Orders {
+		order, err := r.client.GetOrderInfo(ord.ID)
+		if err != nil {
+			return orders, err
+		}
+
+		if order.IsRenewed {
+			continue
+		}
+
+		if filterCommonName == "" {
+			orders = append(orders, order)
+		} else {
+			// If the certificate hasn't been revoked/reissued, API will not return the certificate's status.
+			// Cert Status: issued == "", reissued == "issued", revoked == "revoked"
+			if order.Certificate.CommonName == filterCommonName {
+				orders = append(orders, order)
+			}
+		}
+	}
+
+	if len(orders) != 0 {
+		return orders, nil
+	}
+
+	return orders, nil
+}
+
+func (r *CertificateResource) checkDuplicateCertPlacement(commonName string) error {
+	// Check if the common name existed by manual creation
+	orders, err := r.getIssuedOrders(commonName)
+	if err != nil {
+		return fmt.Errorf("getOrder error, %v", err)
+	}
+
+	for _, ord := range orders {
+		if ord.Certificate.Status == "issued" || ord.Certificate.Status == "" {
+			return fmt.Errorf("duplication order placement, %s already placed order on Digicert, order id: %d",
+				commonName, ord.ID)
+		}
+	}
+
+	return nil
+}
+
+func (r *CertificateResource) retrieveReissuableOrd(minOrderRemainingDays int) (order digicertapi.OrderRespBody, isOrdReissuable bool, err error) {
+	orders, err := r.getIssuedOrders("")
+	if err != nil {
+		return order, false, err
+	}
+
+	if len(orders) == 0 {
+		return order, false, nil
+	}
+
+	for _, ord := range orders {
+		orderValidTillDate, err := time.Parse("2006-01-02", ord.OrderValidTill)
+		if err != nil {
+			return order, false, fmt.Errorf("time Parse Error %s", err.Error())
+		}
+		orderEndDate := orderValidTillDate.AddDate(0, 0, 1)
+		orderExpiredDaysRemaining := int(time.Until(orderEndDate).Hours() / 24)
+
+		if ord.Certificate.Status == "revoked" && orderExpiredDaysRemaining > minOrderRemainingDays {
+			// Check if the order id is grab by others threat (tf's concurrent)
+			if isAbleToUseOrderId(ord.ID) {
+				return ord, true, nil
+			}
+		}
+	}
+
+	return order, false, nil
+}
+
+func (r *CertificateResource) distinguishCertType(certificateChain []digicertapi.CertificateChain, commonName string) (certPem string, issuerPem string, rootPem string, err error) {
+	intermediateList, err := r.client.GetIntermediateList()
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Store cert value
+	for _, cert := range certificateChain {
+		// Certiifcate pem
+		if cert.SubjectCommonName == commonName {
+			certPem = cert.Pem
+		}
+		// Unable to retrieve the intermediates of the cert from any api
+		// Therefore, list all the intermediates and compare with the
+		// name from the certificate chain list.
+		for _, intermediate := range intermediateList.Intermediates {
+			if intermediate.SubjectCommonName == cert.SubjectCommonName {
+				// issuer pem
+				issuerPem = cert.Pem
+			}
+		}
+
+		// the last one must be the root certificate
+		rootPem = cert.Pem
+	}
+	return certPem, issuerPem, rootPem, nil
+}
+
+func (r *CertificateResource) getProductInfo(productName string) (product digicertapi.Product, err error) {
+	productList, err := r.client.GetProductList()
+	if err != nil {
+		return product, err
+	}
+
+	for _, product := range productList.Products {
+		if strings.EqualFold(product.Name, productName) {
+			return product, nil
+		}
+	}
+
+	return product, fmt.Errorf("API Key Name is not found in Digicert System. " +
+		"Please double-check that the API key name exists in the Digicert system")
 }
 
 func (r *CertificateResource) issueCertificate(data CertificateResourceModel, csr string) (issueCert digicertapi.IssueCertRespBody, err error) {
@@ -858,6 +1001,27 @@ func (r *CertificateResource) renewCertificate(data CertificateResourceModel, or
 	// Renew cert use the same API ENDPOINT with issue, payload's value will
 	// determine the action is renew or issue. ("RenewalOfOrderId")
 	return r.client.IssueCert(orderPayload)
+}
+
+func (r *CertificateResource) getDomainIDByDCVRandomValue(dcvRandomValue string) (domainID int, err error) {
+	// Obtain the domain id that need to perform dns challenge
+	domains, err := r.client.GetDomainsList()
+	if err != nil {
+		return -1, err
+	}
+
+	for _, domain := range domains {
+		domain, err := r.client.GetDomainInfo(domain.ID)
+		if err != nil {
+			return -1, err
+		}
+
+		if domain.DcvToken.Token == dcvRandomValue {
+			return domain.ID, nil
+		}
+	}
+
+	return -1, nil
 }
 
 func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[string]basetypes.StringValue, order digicertapi.IssueCertRespBody) error {
@@ -970,168 +1134,4 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 		}
 	}
 	return nil
-}
-
-func (r *CertificateResource) getDomainIDByDCVRandomValue(dcvRandomValue string) (domainID int, err error) {
-	// Obtain the domain id that need to perform dns challenge
-	domains, err := r.client.GetDomainsList()
-	if err != nil {
-		return -1, err
-	}
-
-	for _, domain := range domains {
-		domain, err := r.client.GetDomainInfo(domain.ID)
-		if err != nil {
-			return -1, err
-		}
-
-		if domain.DcvToken.Token == dcvRandomValue {
-			return domain.ID, nil
-		}
-	}
-
-	return -1, nil
-}
-
-func (r *CertificateResource) getIssuedOrders(filterCommonName string) (orders []digicertapi.OrderRespBody, err error) {
-	orderList, err := r.client.GetOrders(filterCommonName)
-	if err != nil {
-		return orders, err
-	}
-
-	// GetOrderInfo() will only return with the primary certificate,
-	// Therefore, filter the common name that is same as the primary
-	// certificate's domain name.
-	// Can obtain certificate's status only from get order info endpoint
-	for _, ord := range orderList.Orders {
-		order, err := r.client.GetOrderInfo(ord.ID)
-		if err != nil {
-			return orders, err
-		}
-
-		if order.IsRenewed {
-			continue
-		}
-
-		if filterCommonName == "" {
-			orders = append(orders, order)
-		} else {
-			// If the certificate hasn't been revoked/reissued, API will not return the certificate's status.
-			// Cert Status: issued == "", reissued == "issued", revoked == "revoked"
-			if order.Certificate.CommonName == filterCommonName {
-				orders = append(orders, order)
-			}
-		}
-	}
-
-	if len(orders) != 0 {
-		return orders, nil
-	}
-
-	return orders, nil
-}
-
-func (r *CertificateResource) getProductInfo(productName string) (product digicertapi.Product, err error) {
-	productList, err := r.client.GetProductList()
-	if err != nil {
-		return product, err
-	}
-
-	for _, product := range productList.Products {
-		if strings.EqualFold(product.Name, productName) {
-			return product, nil
-		}
-	}
-
-	return product, fmt.Errorf("API Key Name is not found in Digicert System. " +
-		"Please double-check that the API key name exists in the Digicert system")
-}
-
-func (r *CertificateResource) retrieveReissuableOrd(minOrderRemainingDays int) (order digicertapi.OrderRespBody, isOrdReissuable bool, err error) {
-	orders, err := r.getIssuedOrders("")
-	if err != nil {
-		return order, false, err
-	}
-
-	if len(orders) == 0 {
-		return order, false, nil
-	}
-
-	for _, ord := range orders {
-		orderValidTillDate, err := time.Parse("2006-01-02", ord.OrderValidTill)
-		if err != nil {
-			return order, false, fmt.Errorf("time Parse Error %s", err.Error())
-		}
-		orderEndDate := orderValidTillDate.AddDate(0, 0, 1)
-		orderExpiredDaysRemaining := int(time.Until(orderEndDate).Hours() / 24)
-
-		if ord.Certificate.Status == "revoked" && orderExpiredDaysRemaining > minOrderRemainingDays {
-			// Check if the order id is grab by others threat (tf's concurrent)
-			if isAbleToUseOrderId(ord.ID) {
-				return ord, true, nil
-			}
-		}
-	}
-
-	return order, false, nil
-}
-
-func (r *CertificateResource) checkDuplicateCertPlacement(commonName string) error {
-	// Check if the common name existed by manual creation
-	orders, err := r.getIssuedOrders(commonName)
-	if err != nil {
-		return fmt.Errorf("getOrder error, %v", err)
-	}
-
-	for _, ord := range orders {
-		if ord.Certificate.Status == "issued" || ord.Certificate.Status == "" {
-			return fmt.Errorf("duplication order placement, %s already placed order on Digicert, order id: %d",
-				commonName, ord.ID)
-		}
-	}
-
-	return nil
-}
-
-func (r *CertificateResource) distinguishCertType(certificateChain []digicertapi.CertificateChain, commonName string) (certPem string, issuerPem string, rootPem string, err error) {
-	intermediateList, err := r.client.GetIntermediateList()
-	if err != nil {
-		return "", "", "", err
-	}
-
-	// Store cert value
-	for _, cert := range certificateChain {
-		// Certiifcate pem
-		if cert.SubjectCommonName == commonName {
-			certPem = cert.Pem
-		}
-		// Unable to retrieve the intermediates of the cert from any api
-		// Therefore, list all the intermediates and compare with the
-		// name from the certificate chain list.
-		for _, intermediate := range intermediateList.Intermediates {
-			if intermediate.SubjectCommonName == cert.SubjectCommonName {
-				// issuer pem
-				issuerPem = cert.Pem
-			}
-		}
-
-		// the last one must be the root certificate
-		rootPem = cert.Pem
-	}
-	return certPem, issuerPem, rootPem, nil
-}
-
-func isAbleToUseOrderId(orderID int) bool {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	// check if the order id is grab by others threat (tf's concurrent)
-	for _, order_id := range used_order_ids {
-		if order_id == orderID {
-			return false
-		}
-	}
-
-	used_order_ids = append(used_order_ids, orderID)
-	return true
 }
