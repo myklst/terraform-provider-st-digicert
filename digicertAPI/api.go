@@ -118,6 +118,25 @@ func (c *Client) ReissueCert(orderPayload OrderPayload, orderID int) (issueCert 
 	return issueCert, nil
 }
 
+type CertificateChain struct {
+	SubjectCommonName string `json:"subject_common_name"`
+	Pem               string `json:"pem"`
+}
+
+type Certificate struct {
+	ID               int                `json:"id"`
+	Status           string             `json:"status"`
+	CommonName       string             `json:"common_name"`
+	ValidTill        string             `json:"valid_till"`
+	CertificateChain []CertificateChain `json:"certificate_chain"`
+	Organization     Organization       `json:"organization"`
+	CSR              string             `json:"csr"`
+	PrivateKey       string             `json:"-"`
+	CertificatePem   string             `json:"-"`
+	IssuerPem        string             `json:"-"`
+	RootPem          string             `json:"-"`
+}
+
 type OrderRespBody struct {
 	ID             int         `json:"id"`
 	Certificate    Certificate `json:"certificate"`
@@ -163,25 +182,6 @@ func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err err
 	}
 
 	return orders, nil
-}
-
-type CertificateChain struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	Pem               string `json:"pem"`
-}
-
-type Certificate struct {
-	ID               int                `json:"id"`
-	Status           string             `json:"status"`
-	CommonName       string             `json:"common_name"`
-	ValidTill        string             `json:"valid_till"`
-	CertificateChain []CertificateChain `json:"certificate_chain"`
-	Organization     Organization       `json:"organization"`
-	CSR              string             `json:"csr"`
-	PrivateKey       string             `json:"-"`
-	CertificatePem   string             `json:"-"`
-	IssuerPem        string             `json:"-"`
-	RootPem          string             `json:"-"`
 }
 
 type CertificateChainList struct {
