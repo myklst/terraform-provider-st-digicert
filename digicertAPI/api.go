@@ -20,19 +20,6 @@ const (
 	ORGANIZATION_ENDPOINT                = "https://www.digicert.com/services/v2/organization"
 )
 
-type Organization struct {
-	ID int `json:"id"`
-}
-
-type OrderPayload struct {
-	Certificate      CertificatePayload   `json:"certificate"`
-	Organization     Organization         `json:"organization"`
-	OrderValidity    OrderValidityPayload `json:"order_validity,omitempty"`
-	PaymentMethod    string               `json:"payment_method"`
-	RenewalOfOrderID int                  `json:"renewal_of_order_id"`
-	DcvMethod        string               `json:"dcv_method"`
-}
-
 type CertificatePayload struct {
 	ID               int                `json:"certificate_id"`
 	Organization     Organization       `json:"organization"`
@@ -46,8 +33,27 @@ type CertificatePayload struct {
 	PrivateKey       string             `json:"-"`
 }
 
+type Organization struct {
+	ID int `json:"id"`
+}
+
 type OrderValidityPayload struct {
 	Days int `json:"days,omitempty"`
+}
+
+type OrderPayload struct {
+	Certificate      CertificatePayload   `json:"certificate"`
+	Organization     Organization         `json:"organization"`
+	OrderValidity    OrderValidityPayload `json:"order_validity,omitempty"`
+	PaymentMethod    string               `json:"payment_method"`
+	RenewalOfOrderID int                  `json:"renewal_of_order_id"`
+	DcvMethod        string               `json:"dcv_method"`
+}
+
+type DomainRespBody struct {
+	ID       int      `json:"id"`
+	Name     string   `json:"name"`
+	DcvToken DcvToken `json:"dcv_token"`
 }
 
 type IssueCertRespBody struct {
@@ -62,12 +68,6 @@ type IssueCertRespBody struct {
 	CertificateValidTill string             `json:"-"`
 	OrderValidTillDay    int                `json:"-"`
 	ErrorMsg             []ErrorMsg         `json:"errors"`
-}
-
-type DomainRespBody struct {
-	ID       int      `json:"id"`
-	Name     string   `json:"name"`
-	DcvToken DcvToken `json:"dcv_token"`
 }
 
 func (c *Client) IssueCert(orderPayLoad OrderPayload) (issueCert IssueCertRespBody, err error) {
@@ -118,11 +118,6 @@ func (c *Client) ReissueCert(orderPayload OrderPayload, orderID int) (issueCert 
 	return issueCert, nil
 }
 
-type OrderListRespBody struct {
-	Orders   []OrderRespBody `json:"orders"`
-	ErrorMsg []ErrorMsg      `json:"errors"`
-}
-
 type OrderRespBody struct {
 	ID             int         `json:"id"`
 	Certificate    Certificate `json:"certificate"`
@@ -130,6 +125,25 @@ type OrderRespBody struct {
 	OrderValidTill string      `json:"order_valid_till"`
 	IsRenewed      bool        `json:"is_renewed"`
 	ErrorMsg       []ErrorMsg  `json:"errors"`
+}
+
+func (c *Client) GetOrderInfo(orderId int) (order OrderRespBody, err error) {
+	url := fmt.Sprintf("%s/%d", ORDER_ENDPOINT, orderId)
+	resp, err := c.httpResponse(http.MethodGet, url, nil)
+	if err != nil {
+		return OrderRespBody{}, err
+	}
+
+	if err := json.Unmarshal(resp, &order); err != nil {
+		return OrderRespBody{}, err
+	}
+
+	return order, err
+}
+
+type OrderListRespBody struct {
+	Orders   []OrderRespBody `json:"orders"`
+	ErrorMsg []ErrorMsg      `json:"errors"`
 }
 
 func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err error) {
@@ -151,18 +165,9 @@ func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err err
 	return orders, nil
 }
 
-func (c *Client) GetOrderInfo(orderId int) (order OrderRespBody, err error) {
-	url := fmt.Sprintf("%s/%d", ORDER_ENDPOINT, orderId)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
-	if err != nil {
-		return OrderRespBody{}, err
-	}
-
-	if err := json.Unmarshal(resp, &order); err != nil {
-		return OrderRespBody{}, err
-	}
-
-	return order, err
+type CertificateChain struct {
+	SubjectCommonName string `json:"subject_common_name"`
+	Pem               string `json:"pem"`
 }
 
 type Certificate struct {
@@ -181,11 +186,6 @@ type Certificate struct {
 
 type CertificateChainList struct {
 	CertificateChain []CertificateChain `json:"intermediates"`
-}
-
-type CertificateChain struct {
-	SubjectCommonName string `json:"subject_common_name"`
-	Pem               string `json:"pem"`
 }
 
 func (c *Client) GetCertificateChain(certID int) (certificateChains []CertificateChain, err error) {
@@ -243,6 +243,7 @@ func (c *Client) GetProductList() (productList ProductListRespBody, err error) {
 	if err := json.Unmarshal(resp, &productList); err != nil {
 		return ProductListRespBody{}, err
 	}
+
 	return productList, nil
 }
 

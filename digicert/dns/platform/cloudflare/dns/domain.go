@@ -31,36 +31,7 @@ func (c *Cloudflare) getZoneIDByName(domainName string) (zoneID string, err erro
 	return zoneID, nil
 }
 
-func (c *Cloudflare) createDNSRecord(domainName, recordName, content, rrType string, ttl int) (dnsRecordID string, err error) {
-	zoneID, err := c.getZoneIDByName(domainName)
-	if err != nil {
-		return "", err
-	}
-
-	createDNS := cloudflare.CreateDNSRecordParams{
-		Type: rrType,
-		Name: recordName,
-		// Value need to be enclosed in double marks. `"verify_txt_record_123456"`.
-		Content: fmt.Sprintf("%q", content),
-		TTL:     ttl,
-	}
-
-	var dnsRecord cloudflare.DNSRecord
-	createDNSRecord := func() error {
-		if dnsRecord, err = c.Client.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), createDNS); err != nil {
-			logrus.Errorf("Cloudflare Failed to create DNS record: %v", err)
-			return err
-		}
-		return nil
-	}
-	if err := backoff_retry.RetryOperator(createDNSRecord, MAX_ELAPSED_TIME); err != nil {
-		return "", fmt.Errorf("Cloudflare createDNSRecord() Failed to create dns records: %v", err)
-	}
-
-	return dnsRecord.ID, nil
-}
-
-func (c *Cloudflare) getDNSRecordsByDomainName(domainName string) (dnsRecords []cloudflare.DNSRecord, err error) {
+func (c *Cloudflare) getDnsRecordsByDomainName(domainName string) (dnsRecords []cloudflare.DNSRecord, err error) {
 	zoneID, err := c.getZoneIDByName(domainName)
 	if err != nil {
 		return dnsRecords, err
@@ -80,7 +51,36 @@ func (c *Cloudflare) getDNSRecordsByDomainName(domainName string) (dnsRecords []
 	return dnsRecords, nil
 }
 
-func (c *Cloudflare) updateDNSRecord(domainName, id, recordName, content, rrType string, ttl int) (err error) {
+func (c *Cloudflare) addDnsRecord(domainName, recordName, content, rrType string, ttl int) (dnsRecordID string, err error) {
+	zoneID, err := c.getZoneIDByName(domainName)
+	if err != nil {
+		return "", err
+	}
+
+	createDNS := cloudflare.CreateDNSRecordParams{
+		Type: rrType,
+		Name: recordName,
+		// Value need to be enclosed in double marks. `"verify_txt_record_123456"`.
+		Content: fmt.Sprintf("%q", content),
+		TTL:     ttl,
+	}
+
+	var dnsRecord cloudflare.DNSRecord
+	addDnsRecord := func() error {
+		if dnsRecord, err = c.Client.CreateDNSRecord(context.Background(), cloudflare.ZoneIdentifier(zoneID), createDNS); err != nil {
+			logrus.Errorf("Cloudflare Failed to create DNS record: %v", err)
+			return err
+		}
+		return nil
+	}
+	if err := backoff_retry.RetryOperator(addDnsRecord, MAX_ELAPSED_TIME); err != nil {
+		return "", fmt.Errorf("Cloudflare addDnsRecord() Failed to create dns records: %v", err)
+	}
+
+	return dnsRecord.ID, nil
+}
+
+func (c *Cloudflare) updateDnsRecord(domainName, id, recordName, content, rrType string, ttl int) (err error) {
 	zoneID, err := c.getZoneIDByName(domainName)
 	if err != nil {
 		return err
@@ -105,7 +105,37 @@ func (c *Cloudflare) updateDNSRecord(domainName, id, recordName, content, rrType
 	if err := backoff_retry.RetryOperator(updateDNSRercords, MAX_ELAPSED_TIME); err != nil {
 		return fmt.Errorf("Cloudflare updateDNSRercords() Failed to update dns records: %v", err)
 	}
+
 	return nil
+}
+
+func (c *Cloudflare) UpsertDNSRecord(domainName, token string) (dnsRecordID string, err error) {
+	dnsRecords, err := c.getDnsRecordsByDomainName(domainName)
+	if err != nil {
+		return "", err
+	}
+
+	if len(dnsRecords) == 0 {
+		return "", fmt.Errorf("Cloudflare No DNS records were found")
+	}
+
+	ttl := 300
+	for _, dnsRecord := range dnsRecords {
+		if dnsRecord.Type == "TXT" {
+			// Upated
+			if err := c.updateDnsRecord(domainName, dnsRecord.ID, domainName, token, dnsRecord.Type, ttl); err != nil {
+				return "", err
+			}
+			return dnsRecord.ID, nil
+		}
+	}
+
+	dnsRecordID, err = c.addDnsRecord(domainName, domainName, token, "TXT", ttl)
+	if err != nil {
+		return "", err
+	}
+
+	return dnsRecordID, nil
 }
 
 func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) (err error) {
@@ -126,32 +156,4 @@ func (c *Cloudflare) DeleteDnsRecord(recordId, domainName string) (err error) {
 	}
 
 	return nil
-}
-
-func (c *Cloudflare) UpdateRecord(domainName, token string) (dnsRecordID string, err error) {
-	dnsRecords, err := c.getDNSRecordsByDomainName(domainName)
-	if err != nil {
-		return "", err
-	}
-	if len(dnsRecords) == 0 {
-		return "", fmt.Errorf("Cloudflare No DNS records were found")
-	}
-
-	ttl := 300
-	for _, dnsRecord := range dnsRecords {
-		if dnsRecord.Type == "TXT" {
-			// Upated
-			if err := c.updateDNSRecord(domainName, dnsRecord.ID, domainName, token, dnsRecord.Type, ttl); err != nil {
-				return "", err
-			}
-			return dnsRecord.ID, nil
-		}
-	}
-
-	dnsRecordID, err = c.createDNSRecord(domainName, domainName, token, "TXT", ttl)
-	if err != nil {
-		return "", err
-	}
-
-	return dnsRecordID, nil
 }

@@ -104,6 +104,7 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	deleteDomainRecordRequest := &alidns.DeleteDomainRecordRequest{
 		RecordId: tea.String(id),
 	}
+
 	deleteDnsRecord := func() error {
 		if _, err := a.Client.DeleteDomainRecord(deleteDomainRecordRequest); err != nil {
 			tflog.Debug(context.Background(), fmt.Sprintf("Alidns delete record Error: %s", err.Error()))
@@ -117,10 +118,11 @@ func (a *Alidns) DeleteDnsRecord(id string) (err error) {
 	if err := backoff_retry.RetryOperator(deleteDnsRecord, MAX_ELAPSED_TIME); err != nil {
 		return fmt.Errorf("Alidns delete dns record. Failed to Delete dns record: %v", err)
 	}
+
 	return nil
 }
 
-func (a *Alidns) CreateAliDNSRecord(commonName string, token string) (recordId string, err error) {
+func (a *Alidns) UpsertDnsRecord(commonName string, token string) (recordId string, err error) {
 	dnsRecords, err := a.getAllDnsRecords(commonName)
 	if err != nil {
 		return "", err

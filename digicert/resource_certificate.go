@@ -922,7 +922,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				recordID, err := alidnsClient.CreateAliDNSRecord(foundDomain.Name, foundDomain.DcvToken.Token)
+				recordID, err := alidnsClient.UpsertDnsRecord(foundDomain.Name, foundDomain.DcvToken.Token)
 				if err != nil {
 					return err
 				}
@@ -940,7 +940,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 					return err
 				}
 
-				dnsRecordID, err := cfClient.UpdateRecord(foundDomain.Name, foundDomain.DcvToken.Token)
+				dnsRecordID, err := cfClient.UpsertDNSRecord(foundDomain.Name, foundDomain.DcvToken.Token)
 				if err != nil {
 					return err
 				}
@@ -1041,7 +1041,6 @@ func (r *CertificateResource) getProductInfo(productName string) (product digice
 		if strings.EqualFold(product.Name, productName) {
 			return product, nil
 		}
-
 	}
 
 	return product, fmt.Errorf("API Key Name is not found in Digicert System. " +
