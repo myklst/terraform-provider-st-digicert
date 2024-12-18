@@ -101,7 +101,7 @@ func (c *Client) execute(req *http.Request) (resp *http.Response, err error) {
 		resp, err = c.client.Do(req)
 		if err != nil {
 			if httpResp.StatusCode == 403 {
-				return backoff.Permanent(fmt.Errorf("403 Forbidden When calling Digicert's API."))
+				return backoff.Permanent(fmt.Errorf("403 Forbidden When calling Digicert's API"))
 			}
 			return err
 		}
