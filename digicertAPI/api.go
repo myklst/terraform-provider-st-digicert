@@ -77,7 +77,7 @@ func (c *Client) IssueCert(orderPayLoad OrderPayload) (issueCert IssueCertRespBo
 		return IssueCertRespBody{}, err
 	}
 
-	resp, err := c.httpResponse(http.MethodPost, url, jsonPayload)
+	resp, err := c.doApiRequest(http.MethodPost, url, jsonPayload)
 	if err != nil {
 		return IssueCertRespBody{}, err
 	}
@@ -101,7 +101,7 @@ func (c *Client) ReissueCert(orderPayload OrderPayload, orderID int) (issueCert 
 		return IssueCertRespBody{}, err
 	}
 
-	resp, err := c.httpResponse(http.MethodPost, url, jsonPayload)
+	resp, err := c.doApiRequest(http.MethodPost, url, jsonPayload)
 	if err != nil {
 		return IssueCertRespBody{}, err
 	}
@@ -148,7 +148,7 @@ type OrderRespBody struct {
 
 func (c *Client) GetOrderInfo(orderId int) (order OrderRespBody, err error) {
 	url := fmt.Sprintf("%s/%d", ORDER_ENDPOINT, orderId)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
+	resp, err := c.doApiRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return OrderRespBody{}, err
 	}
@@ -167,7 +167,7 @@ type OrderListRespBody struct {
 
 func (c *Client) GetOrders(commonName string) (orders OrderListRespBody, err error) {
 	url := fmt.Sprintf("%s?filters[status]=issued&sort=-date_created&filters[common_name]=%s", ORDER_ENDPOINT, commonName)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
+	resp, err := c.doApiRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return OrderListRespBody{}, err
 	}
@@ -190,7 +190,7 @@ type CertificateChainList struct {
 
 func (c *Client) GetCertificateChain(certID int) (certificateChains []CertificateChain, err error) {
 	url := fmt.Sprintf("%s/%d/chain", CERT_ENDPOINT, certID)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
+	resp, err := c.doApiRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return []CertificateChain{}, err
 	}
@@ -213,7 +213,7 @@ type Intermediates struct {
 }
 
 func (c *Client) GetIntermediateList() (intermediateList IntermediateListRespBody, err error) {
-	resp, err := c.httpResponse(http.MethodGet, INTERMEDIATE_ENDPOINT, nil)
+	resp, err := c.doApiRequest(http.MethodGet, INTERMEDIATE_ENDPOINT, nil)
 	if err != nil {
 		return IntermediateListRespBody{}, err
 	}
@@ -235,7 +235,7 @@ type Product struct {
 }
 
 func (c *Client) GetProductList() (productList ProductListRespBody, err error) {
-	resp, err := c.httpResponse(http.MethodGet, PRODUCT_ENDPOINT, nil)
+	resp, err := c.doApiRequest(http.MethodGet, PRODUCT_ENDPOINT, nil)
 	if err != nil {
 		return ProductListRespBody{}, err
 	}
@@ -265,7 +265,7 @@ type DcvToken struct {
 }
 
 func (c *Client) GetDomainsList() (domains []Domain, err error) {
-	resp, err := c.httpResponse(http.MethodGet, DOMAIN_ENDPOINT, nil)
+	resp, err := c.doApiRequest(http.MethodGet, DOMAIN_ENDPOINT, nil)
 	if err != nil {
 		return []Domain{}, err
 	}
@@ -283,7 +283,7 @@ func (c *Client) GetDomainsList() (domains []Domain, err error) {
 
 func (c *Client) GetDomainInfo(domainID int) (domain Domain, err error) {
 	url := fmt.Sprintf("%s/%d?include_dcv=true&include_validation=true", DOMAIN_ENDPOINT, domainID)
-	resp, err := c.httpResponse(http.MethodGet, url, nil)
+	resp, err := c.doApiRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return Domain{}, err
 	}
@@ -306,7 +306,7 @@ type ErrorMsg struct {
 func (c *Client) CheckDomainDCV(domainID int) (err error) {
 	url := fmt.Sprintf("%s/%d/dcv/validate-token", DOMAIN_ENDPOINT, domainID)
 
-	activateDomainresp, err := c.httpResponse(http.MethodPut, url, nil)
+	activateDomainresp, err := c.doApiRequest(http.MethodPut, url, nil)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ func (c *Client) RevokeCert(certId int) (err error) {
 		"skip_approval": true
 	}`)
 
-	resp, err := c.httpResponse(http.MethodPut, url, payloadJson)
+	resp, err := c.doApiRequest(http.MethodPut, url, payloadJson)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (c *Client) RevokeAllCert(orderId int) (err error) {
 		"skip_approval": true
 		}`)
 
-	resp, err := c.httpResponse(http.MethodPut, url, jsonPayload)
+	resp, err := c.doApiRequest(http.MethodPut, url, jsonPayload)
 	if err != nil {
 		return err
 	}
@@ -383,7 +383,7 @@ func (c *Client) CancelOrderRequest(orderId int) (err error) {
 		"note": "Fail validate domain."
 	}`)
 
-	ordStatusResp, err := c.httpResponse(http.MethodPut, url, payloadJson)
+	ordStatusResp, err := c.doApiRequest(http.MethodPut, url, payloadJson)
 	if err != nil {
 		return err
 	}

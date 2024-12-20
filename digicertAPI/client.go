@@ -70,46 +70,36 @@ func NewClient(apiKey string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) httpResponse(httpMethod string, url string, payload []byte) (resp []byte, err error) {
+func (c *Client) doApiRequest(httpMethod string, url string, payload []byte) (resp []byte, err error) {
 	var req *http.Request
-	httpRequest := func() error {
-		req, err = http.NewRequest(httpMethod, url, bytes.NewBuffer(payload))
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	if err := backoff_retry.RetryOperator(httpRequest, MAX_ELAPSED_TIME); err != nil {
-		return nil, fmt.Errorf("digicert http request failure: %v", err)
-	}
-
-	httpResponse, err := c.execute(req)
+	req, err = http.NewRequest(httpMethod, url, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}
-	defer httpResponse.Body.Close()
 
-	return io.ReadAll(httpResponse.Body)
-}
-
-func (c *Client) execute(req *http.Request) (resp *http.Response, err error) {
 	req.Header.Add(headerContent, mediaTypeJSON)
 	req.Header.Add(headerDeviceKey, c.ApiKey)
 
 	var httpResp *http.Response
+	var respBody []byte
 	httpResponse := func() error {
-		resp, err = c.client.Do(req)
+		httpResp, err = c.client.Do(req)
 		if err != nil {
 			if httpResp.StatusCode == 403 {
 				return backoff.Permanent(fmt.Errorf("403 Forbidden When calling Digicert's API"))
 			}
 			return err
 		}
+		defer httpResp.Body.Close()
+		if respBody, err = io.ReadAll(httpResp.Body); err != nil {
+			return err
+		}
+
 		return nil
 	}
 	if err := backoff_retry.RetryOperator(httpResponse, MAX_ELAPSED_TIME); err != nil {
 		return nil, fmt.Errorf("digicert http response failure: %v", err)
 	}
 
-	return resp, nil
+	return respBody, nil
 }

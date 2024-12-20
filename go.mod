@@ -7,7 +7,6 @@ require (
 	github.com/alibabacloud-go/darabonba-openapi v0.2.1
 	github.com/alibabacloud-go/tea v1.2.2
 	github.com/aws/aws-sdk-go v1.55.5
-	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudflare/cloudflare-go v0.110.0
 	github.com/hashicorp/terraform-plugin-framework v1.13.0
