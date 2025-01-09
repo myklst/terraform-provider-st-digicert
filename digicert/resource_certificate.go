@@ -40,20 +40,21 @@ import (
 )
 
 const (
-	RSA_PRIVATE_KEY          = "RSA PRIVATE KEY"
-	CERTIFICATE_REQUEST      = "CERTIFICATE REQUEST"
-	DELETE_RECORD            = "DELETE"
-	UPSERT_RECORD            = "UPSERT"
-	AWS_ACCESS_KEY_ID        = "AWS_ACCESS_KEY_ID"
-	AWS_SECRET_ACCESS_KEY    = "AWS_SECRET_ACCESS_KEY"
-	AWS_REGION               = "AWS_REGION"
-	ALICLOUD_ACCESS_KEY      = "ALICLOUD_ACCESS_KEY"
-	ALICLOUD_SECRET_KEY      = "ALICLOUD_SECRET_KEY"
-	CLOUDFLARE_DNS_API_TOKEN = "CLOUDFLARE_DNS_API_TOKEN"
-	SIGNATURE_HASH           = "sha256"
-	DCV_METHOD               = "dns-txt-token"
-	PAYMENT_METHOD           = "balance"
-	MAX_ELAPSED_TIME         = 10 * time.Minute
+	RSA_PRIVATE_KEY           = "RSA PRIVATE KEY"
+	CERTIFICATE_REQUEST       = "CERTIFICATE REQUEST"
+	DELETE_RECORD             = "DELETE"
+	UPSERT_RECORD             = "UPSERT"
+	AWS_ACCESS_KEY_ID         = "AWS_ACCESS_KEY_ID"
+	AWS_SECRET_ACCESS_KEY     = "AWS_SECRET_ACCESS_KEY"
+	AWS_REGION                = "AWS_REGION"
+	ALICLOUD_ACCESS_KEY       = "ALICLOUD_ACCESS_KEY"
+	ALICLOUD_SECRET_KEY       = "ALICLOUD_SECRET_KEY"
+	CLOUDFLARE_DNS_API_TOKEN  = "CLOUDFLARE_DNS_API_TOKEN"
+	CLOUDFLARE_ZONE_API_TOKEN = "CLOUDFLARE_ZONE_API_TOKEN"
+	SIGNATURE_HASH            = "sha256"
+	DCV_METHOD                = "dns-txt-token"
+	PAYMENT_METHOD            = "balance"
+	MAX_ELAPSED_TIME          = 10 * time.Minute
 )
 
 var (
@@ -125,6 +126,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				Description: "Additional domains to be secured. Can result in additional costs.",
 				ElementType: types.StringType,
 				Optional:    true,
+				// Computed:    true,
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.RequiresReplace(),
 				},
@@ -149,9 +151,6 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Default:     int32default.StaticInt32(30),
-				PlanModifiers: []planmodifier.Int32{
-					int32planmodifier.UseStateForUnknown(),
-				},
 				Validators: []validator.Int32{
 					int32validator.Between(-1, 398),
 				},
@@ -162,7 +161,6 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				Required: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
-					stringplanmodifier.UseStateForUnknown(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(4),
@@ -174,9 +172,6 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional: true,
 				Computed: true,
 				Default:  int32default.StaticInt32(365),
-				PlanModifiers: []planmodifier.Int32{
-					int32planmodifier.UseStateForUnknown(),
-				},
 				Validators: []validator.Int32{
 					int32validator.Between(1, 1095),
 				},
@@ -184,69 +179,42 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 			"order_id": schema.Int32Attribute{
 				Description: "Order's ID.",
 				Computed:    true,
-				PlanModifiers: []planmodifier.Int32{
-					int32planmodifier.UseStateForUnknown(),
-				},
 			},
 			"certificate_pem": schema.StringAttribute{
 				Description: "The certificate in PEM format.",
 				Computed:    true,
 				Sensitive:   true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"issuer_pem": schema.StringAttribute{
 				Description: "The intermediate certificates of the issuer.",
 				Computed:    true,
 				Sensitive:   true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"root_pem": schema.StringAttribute{
 				Description: "The Root certiifacets of the issuer.",
 				Computed:    true,
 				Sensitive:   true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"private_key_pem": schema.StringAttribute{
 				Description: "The certificate's private key, in PEM format.",
 				Computed:    true,
 				Sensitive:   true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"csr": schema.StringAttribute{
 				Description: "Certificate signing request (CSR).",
 				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"certificate_id": schema.Int32Attribute{
 				Description: "Certificate's ID.",
 				Computed:    true,
-				PlanModifiers: []planmodifier.Int32{
-					int32planmodifier.UseStateForUnknown(),
-				},
 			},
 			"order_valid_till": schema.StringAttribute{
 				Description: "The date of the order is valid until.",
 				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"certificate_valid_till": schema.StringAttribute{
 				Description: "The date of the certicate is valid until",
 				Computed:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -272,7 +240,7 @@ func (r *CertificateResource) Schema(ctx context.Context, req resource.SchemaReq
 							"The valid configs:" +
 							"\n\t- `route53` - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`" +
 							"\n\t- `alidns` - `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY`" +
-							"\n\t- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`",
+							"\n\t- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`, `CLOUDFLARE_ZONE_API_TOKEN`",
 						Required:  true,
 						Sensitive: true,
 						Validators: []validator.Map{
@@ -694,22 +662,22 @@ func (r *CertificateResource) ModifyPlan(ctx context.Context, req resource.Modif
 			case "route53":
 				if k != AWS_ACCESS_KEY_ID && k != AWS_SECRET_ACCESS_KEY && k != AWS_REGION {
 					resp.Diagnostics.AddAttributeError(path.Root("dns_challenge"), "DNS Configure Error.",
-						"AWS Route53's config allow only  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION, "+
-							fmt.Sprintf("but now has %s", k))
+						"Config only allow AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION, "+
+							fmt.Sprintf("But now has %s", k))
 					return
 				}
 			case "alidns":
 				if k != ALICLOUD_ACCESS_KEY && k != ALICLOUD_SECRET_KEY {
 					resp.Diagnostics.AddAttributeError(path.Root("dns_challenge"), "DNS Configure Error.",
-						"Alidns provider's config allow only ALICLOUD_ACCESS_KEY and ALICLOUD_SECRET_KEY, "+
-							fmt.Sprintf("but now has %s", k))
+						"Config only allow ALICLOUD_ACCESS_KEY and ALICLOUD_SECRET_KEY, "+
+							fmt.Sprintf("But now has %s", k))
 					return
 				}
 			case "cloudflare":
-				if k != CLOUDFLARE_DNS_API_TOKEN {
+				if k != CLOUDFLARE_DNS_API_TOKEN && k != CLOUDFLARE_ZONE_API_TOKEN {
 					resp.Diagnostics.AddAttributeError(path.Root("dns_challenge"), "DNS Configure Error.",
-						"Cloudflare provider's config allow only CLOUDFLARE_DNS_API_TOKEN, "+
-							fmt.Sprintf("but now has %s", k))
+						"Config only allow CLOUDFLARE_DNS_API_TOKEN and CLOUDFLARE_ZONE_API_TOKEN , "+
+							fmt.Sprintf("But now has %s", k))
 					return
 				}
 			default:
@@ -1126,7 +1094,7 @@ func (r *CertificateResource) dnsChallenge(dnsProvider string, dnsCreds map[stri
 			case "cloudflare":
 				var token string
 				for k, v := range dnsCreds {
-					if k == CLOUDFLARE_DNS_API_TOKEN {
+					if k == CLOUDFLARE_DNS_API_TOKEN || k == CLOUDFLARE_ZONE_API_TOKEN {
 						token = v.ValueString()
 					}
 				}
