@@ -458,22 +458,22 @@ func (r *CertificateResource) Read(ctx context.Context, req resource.ReadRequest
 
 	if len(orders) == 0 {
 		resp.Diagnostics.AddError("Get Order Info Error.",
-			"This resource might been deleted outside terraform.")
+			"This resource might been modified outside terraform or the order might have expired.")
 		return
 	}
 
 	var order digicertapi.OrderRespBody
-	isCertIssued := false
+	isCertModified := false
 	for _, orderFound := range orders {
-		if orderFound.Certificate.Status == "issued" || orderFound.Certificate.Status == "" {
-			isCertIssued = true
+		if orderFound.Certificate.Status == "issued" || orderFound.Certificate.Status == "expired" || orderFound.Certificate.Status == "" {
+			isCertModified = false
 			order = orderFound
 		}
 	}
 
-	if !isCertIssued {
+	if isCertModified {
 		resp.Diagnostics.AddError("Get Order Info Error.",
-			"This resource might been deleted outside terraform.")
+			"This resource might been modified outside terraform.")
 		return
 	}
 
