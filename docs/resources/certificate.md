@@ -51,8 +51,8 @@ resource "st-digicert_certificate" "certificate" {
 ### Optional
 
 - `dns_challenge` (Block, Optional) (see [below for nested schema](#nestedblock--dns_challenge))
-- `min_days_remaining` (Number) Threshole of the expired date remaining of the certificate.
-- `order_validity_days` (Number) Validity period of the order. Number of days the order remains valid.
+- `min_days_remaining` (Number) Threshole of the expired date remaining of the certificate. Default 30 days.
+- `order_validity_days` (Number) Validity period of the order. Number of days the order remains valid. Default 365 days.
 - `sans` (List of String) Additional domains to be secured. Can result in additional costs.
 
 ### Read-Only
@@ -75,7 +75,7 @@ Required:
 - `config` (Map of String, Sensitive) Configuration of the DNS provider, The valid configs:
 	- `route53` - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 	- `alidns` - `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY`
-	- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`, `CLOUDFLARE_ZONE_API_TOKEN`
+	- `cloudflare` - `CLOUDFLARE_DNS_API_TOKEN`
 - `provider` (String) DNS provider which manage the domain, Valid providers:
 	- `route53`
 	- `alidns`
