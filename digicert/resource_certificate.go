@@ -452,27 +452,26 @@ func (r *CertificateResource) Read(ctx context.Context, req resource.ReadRequest
 
 	orders, err := r.getIssuedOrders(state.CommonName.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Get Order Info Error.", err.Error())
+		resp.Diagnostics.AddError("Get Issued Order Info Error.", err.Error())
 		return
 	}
 
 	if len(orders) == 0 {
-		resp.Diagnostics.AddError("Get Order Info Error.",
+		resp.Diagnostics.AddError("Get Issued Order Info Error.",
 			"This resource might been modified outside terraform or the order might have expired.")
 		return
 	}
 
 	var order digicertapi.OrderRespBody
-	isCertModified := false
 	for _, orderFound := range orders {
 		if orderFound.Certificate.Status == "issued" || orderFound.Certificate.Status == "expired" || orderFound.Certificate.Status == "" {
-			isCertModified = false
 			order = orderFound
 		}
 	}
 
-	if isCertModified {
-		resp.Diagnostics.AddError("Get Order Info Error.",
+	// Certificate's status is not an expected value ("issued", "reissued" or "expired")
+	if order.ID == 0 {
+		resp.Diagnostics.AddError("Certificate's status is not an expected value (\"issued\", or \"expired\")",
 			"This resource might been modified outside terraform.")
 		return
 	}
